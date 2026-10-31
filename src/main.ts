@@ -1,11 +1,12 @@
 import Phaser from "phaser";
 import "./style.css";
+import { setupVisuals, addBackdrop } from "./art/pixelArt";
 
 const W = 480, H = 270, GROUND = 215, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
 const GRAVITY = 900, JUMP = -330;
 type Kind = "wall" | "gap" | "ward" | "orb" | "essence";
-type Thing = { kind: Kind; x: number; width: number; collected?: boolean };
+type Thing = { kind: Kind; x: number; width: number; collected?: boolean; sprite?: Phaser.GameObjects.Image };
 type Motion = "grounded" | "jumping" | "falling";
 type Material = "physical" | "intangible";
 const COLORS = { sky: 0x25274f, dark: 0x181832, violet: 0x6c4ba3, cyan: 0x65d6ff, grass: 0x80c29b, gold: 0xffcf65 };
@@ -15,6 +16,9 @@ class MenuScene extends Phaser.Scene {
   constructor() { super("menu"); }
   create() {
     paintBackground(this, 0);
+    this.add.tileSprite(0, 211, W, H - 211, "ground").setOrigin(0, 0).setDepth(-1);
+    const hero = this.add.image(W / 2, 145, "phantom-0").setScale(1.35).setDepth(4);
+    this.tweens.add({targets: hero, y: 139, duration: 800, yoyo: true, repeat: -1});
     const title = this.add.text(W / 2, 69, "PHANTOM RUN", {fontFamily:"monospace",fontSize:"34px",color:"#f6f0ff",stroke:"#423575",strokeThickness:7}).setOrigin(.5);
     this.tweens.add({targets:title,y:65,duration:1100,yoyo:true,repeat:-1});
     this.add.text(W/2,117,"ATRAVESSE O IMPOSSÍVEL", {fontFamily:"monospace",fontSize:"11px",color:"#8deaff"}).setOrigin(.5);
@@ -28,28 +32,15 @@ class MenuScene extends Phaser.Scene {
 }
 
 function paintBackground(scene: Phaser.Scene, distance: number) {
-  const g=scene.add.graphics().setDepth(-50);
-  g.fillStyle(COLORS.sky).fillRect(0,0,W,H);
-  g.fillStyle(0x3c376c).fillRect(0,75,W,140);
-  g.fillStyle(0xf9e3aa).fillCircle(397,49,24);
-  g.fillStyle(0xd2b5c1,.6).fillCircle(389,43,6).fillCircle(405,56,4);
-  for(let i=0;i<20;i++){
-    const x=((i*47-distance*.07)% (W+60)+(W+60))%(W+60)-30;
-    const h=28+(i*19)%50;
-    g.fillStyle(i%2?0x26294d:0x302e59).fillTriangle(x,178,x+14,178-h,x+28,178);
-    g.fillRect(x+9,178-h*.55,9,h*.55);
-  }
-  for(let i=0;i<13;i++){
-    const x=((i*71-distance*.25)%(W+70)+(W+70))%(W+70)-35;
-    g.fillStyle(0x333559).fillRect(x,175,5,35);
-    g.fillStyle(0x46446f).fillRoundedRect(x-8,162,21,18,7);
-    if(i%3===0){g.fillStyle(0xe6b675).fillRect(x+22,140,4,48).fillRect(x+17,139,14,5);g.fillStyle(0xffd681).fillRect(x+21,145,6,9);}
-  }
+  setupVisuals(scene);
+  return addBackdrop(scene, distance);
 }
 
 class GameScene extends Phaser.Scene {
   private world!: Phaser.GameObjects.Graphics;
-  private phantom!: Phaser.GameObjects.Graphics;
+  private phantom!: Phaser.GameObjects.Image;
+  private backdrop!: ReturnType<typeof addBackdrop>;
+  private groundTiles!: Phaser.GameObjects.TileSprite;
   private hud!: Phaser.GameObjects.Text;
   private energyBar!: Phaser.GameObjects.Graphics;
   private overlay!: Phaser.GameObjects.Text;
@@ -77,9 +68,12 @@ class GameScene extends Phaser.Scene {
   constructor(){super("game");}
   create(){
     this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=410;this.lastTime=0;this.acc=0;this.leftHeld=false;this.rightHeld=false;
-    paintBackground(this,0);
+    this.backdrop = paintBackground(this,0);
+    this.groundTiles=this.add.tileSprite(0, 211, W, H-211, "ground").setOrigin(0,0).setDepth(2);
     this.world=this.add.graphics().setDepth(3);
-    this.phantom=this.add.graphics().setDepth(6);
+    this.phantom=this.add.image(PLAYER_X, this.y+16, "phantom-0").setDepth(6);
+    this.add.graphics().setDepth(18).fillStyle(0x1c1a40, .93).fillRoundedRect(5, 4, 320, 40, 5)
+      .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
@@ -99,7 +93,14 @@ class GameScene extends Phaser.Scene {
     let kind:Kind=which<4?"wall":which<6?"gap":which<8?"orb":which===8&&progression>.2?"ward":"essence";
     if(this.spawnAt<700)kind=this.spawnAt<550?"wall":"orb";
     const width=kind==="gap"?45:kind==="wall"?23:kind==="ward"?13:15;
-    this.things.push({kind,x:this.spawnAt,width});
+    const thing:Thing={kind,x:this.spawnAt,width};
+    if(kind!=="gap"){
+      const key = kind==="wall"?"wall":kind==="ward"?"ward":kind==="orb"?"orb":"essence";
+      const y = (kind==="orb"||kind==="essence") ? GROUND-29 : GROUND;
+      thing.sprite=this.add.image(this.spawnAt+width/2, y, key)
+        .setOrigin(.5, (kind==="orb"||kind==="essence")?.5:1).setDepth(5);
+    }
+    this.things.push(thing);
     // All mandatory intangible obstacles are isolated by >= 150px; at max speed, this leaves >= 0.65s.
     const gap=kind==="wall"?190:kind==="gap"?175:kind==="ward"?190:125;
     this.spawnAt+=gap+Math.round(progression*20);
@@ -149,7 +150,10 @@ class GameScene extends Phaser.Scene {
       }else if(touching&&t.kind==="wall"&&this.material==="physical"){this.die();return;}
       else if(touching&&t.kind==="ward"&&this.material==="intangible"){this.die();return;}
     }
-    this.things=this.things.filter(t=>t.x+t.width>this.distance-60);
+    this.things=this.things.filter(t=>{
+      if(t.x+t.width<=this.distance-60){t.sprite?.destroy();return false;}
+      return true;
+    });
     while(this.spawnAt<this.distance+W+240)this.generate();
   }
   private die(){
@@ -160,48 +164,36 @@ class GameScene extends Phaser.Scene {
     this.overlay.setText("GAME OVER\n\nDISTÂNCIA: "+meters+" m\nRECORDE: "+Math.max(best,meters)+" m\nESSÊNCIA: "+this.score+"\n\nESPAÇO OU TOQUE: REINICIAR").setVisible(true);
   }
   private draw(){
-    const g=this.world;g.clear();
-    g.fillStyle(0x654977).fillRect(0,GROUND,W,H-GROUND);
-    g.fillStyle(COLORS.grass).fillRect(0,GROUND-5,W,6);
-    g.fillStyle(0x483b69);
-    for(let i=0;i<30;i++){const x=(i*23-Math.floor(this.distance*.6)%23);g.fillRect(x,GROUND+7+(i%3)*9,12,6);}
+    this.backdrop.mountains.tilePositionX=this.distance*.08;
+    this.backdrop.forest.tilePositionX=this.distance*.23;
+    this.groundTiles.tilePositionX=this.distance;
+    const g=this.world;
+    g.clear();
     for(const t of this.things){
-      if(t.collected)continue;
       const x=Math.floor(t.x-this.distance);
       if(x<-65||x>W+50)continue;
-      if(t.kind==="gap"){g.fillStyle(COLORS.dark).fillRect(x,GROUND-5,t.width,H-GROUND+5);g.fillStyle(0x7f78ae).fillRect(x,GROUND-5,3,5).fillRect(x+t.width-3,GROUND-5,3,5);}
-      if(t.kind==="wall"){
-        g.fillStyle(0x8996bd).fillRect(x,GROUND-39,t.width,39);
-        g.lineStyle(2,0x424675).strokeRect(x,GROUND-39,t.width,39);
-        g.lineBetween(x,GROUND-19,x+t.width,GROUND-19);
-        g.lineBetween(x+11,GROUND-39,x+11,GROUND-19);
-      }
-      if(t.kind==="ward"){
-        g.fillStyle(0xa564ea,.75).fillRoundedRect(x,GROUND-49,t.width,49,4);
-        g.lineStyle(3,0xf0adff).strokeRoundedRect(x,GROUND-49,t.width,49,4);
-      }
-      if(t.kind==="orb"||t.kind==="essence"){
-        g.fillStyle(t.kind==="orb"?COLORS.cyan:COLORS.gold).fillCircle(x+8,GROUND-31,8);
-        g.lineStyle(2,0xffffff,.8).strokeCircle(x+8,GROUND-31,8);
+      if(t.kind==="gap"){
+        g.fillStyle(0x171633).fillRect(x,211,t.width,H-211);
+        g.fillStyle(0x77699d).fillRect(x-2,211,2,5).fillRect(x+t.width,211,2,5);
+      }else if(t.sprite){
+        t.sprite.setX(Math.round(x+t.width/2)).setVisible(!t.collected);
+        if(t.kind==="orb"||t.kind==="essence")
+          t.sprite.setY(GROUND-29+Math.round(Math.sin(this.distance/30+t.x)*2));
       }
     }
-    const p=this.phantom;p.clear();
+    const frame=Math.floor(this.distance/17)%3;
     const intangible=this.material==="intangible";
-    p.fillStyle(intangible?0x55c9f6:0xf7f5ff,intangible?.68:1);
-    p.fillRoundedRect(PLAYER_X-12,this.y+2,26,23,12);
-    p.fillTriangle(PLAYER_X-12,this.y+17,PLAYER_X-13,this.y+27,PLAYER_X-2,this.y+21);
-    p.fillTriangle(PLAYER_X+2,this.y+22,PLAYER_X+7,this.y+27,PLAYER_X+13,this.y+21);
-    p.lineStyle(2,intangible?0x2de0ff:0x435eaa).strokeRoundedRect(PLAYER_X-12,this.y+2,26,23,12);
-    p.fillStyle(0x15274d).fillRect(PLAYER_X-3,this.y+11,3,5).fillRect(PLAYER_X+8,this.y+11,3,5);
-    p.fillStyle(0xf3a5b8).fillRect(PLAYER_X+2,this.y+19,5,3);
-    if(intangible){p.fillStyle(0x74e6ff).fillCircle(PLAYER_X-21,this.y+12,2).fillCircle(PLAYER_X-29,this.y+20,2);}
-    this.hud.setText("PHANTOM  "+Math.floor(this.distance/10)+" m  ✦ "+this.score);
-    this.energyBar.clear();this.energyBar.fillStyle(0x1c1b40).fillRoundedRect(8,26,120,13,3);
-    this.energyBar.fillStyle(this.ep<20?0xf4a16a:COLORS.cyan).fillRect(11,29,Math.floor(114*this.ep/100),7);
-    this.energyBar.lineStyle(1,0xd9d6fa).strokeRoundedRect(8,26,120,13,3);
-    this.energyBar.fillStyle(0xffffff);
-    this.add.text; // Rendering is performed with persistent graphics and text only.
+    this.phantom.setTexture((intangible?"phantom-phase-":"phantom-")+frame)
+      .setPosition(PLAYER_X,Math.round(this.y+16))
+      .setAlpha(intangible?.77:1);
+    this.hud.setText("PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score);
+    this.energyBar.clear();
+    this.energyBar.fillStyle(0x11122f).fillRoundedRect(8,27,122,12,2);
+    this.energyBar.fillStyle(this.ep<20?0xf49c86:0x60d8f8)
+      .fillRect(11,30,Math.floor(116*this.ep/100),6);
+    this.energyBar.lineStyle(1,0xc9c5ff).strokeRoundedRect(8,27,122,12,2);
   }
+
 }
 
 new Phaser.Game({
