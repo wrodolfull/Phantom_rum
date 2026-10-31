@@ -53,11 +53,19 @@ function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number):void {
   }
 }
 function wall(c:CanvasRenderingContext2D):void {
-  dot(c,'#536081',0,0,26,40);dot(c,C.stone,2,2,22,36);
-  dot(c,'#bfcce3',3,3,19,6);dot(c,'#7b87aa',3,21,20,16);
-  for(const y of [12,25])dot(c,C.ink,1,y,24,2);
-  for(const [x,y,h] of [[11,0,12],[7,14,11],[17,27,10]])dot(c,'#556184',x,y,2,h);
-  dot(c,'#303861',0,37,26,3);
+  // A tall, physically impassable wall: Phantom must phase through it.
+  // It extends beyond the maximum 60px jump arc.
+  dot(c,'#536081',0,0,26,66);
+  dot(c,C.stone,2,2,22,62);
+  for(const y of [11,26,42,57]){
+    dot(c,'#495675',0,y,26,2);
+    dot(c,'#bdc9df',2,y+2,22,2);
+  }
+  for(const [x,y,len] of [[10,0,11],[6,13,13],[17,28,14],[11,44,13],[6,59,5]])
+    dot(c,'#586786',x,y,2,len);
+  dot(c,'#d0d8e8',3,3,19,5);
+  dot(c,'#667396',3,32,20,8);
+  dot(c,'#303861',0,63,26,3);
 }
 function grave(c:CanvasRenderingContext2D):void {
   for(let y=0;y<32;y++){
@@ -157,7 +165,7 @@ export function setupVisuals(scene:Phaser.Scene):void {
   make(scene,'phantom-phase-jump',32,32,c=>ghost(c,true,6));
   make(scene,'phantom-hurt',32,32,c=>ghost(c,false,7));
   make(scene,'grave',24,32,grave);
-  make(scene,'wall',26,40,wall);
+  make(scene,'wall',26,66,wall);
   make(scene,'ward',18,50,ward);
   make(scene,'orb',16,16,c=>glow(c,true));
   make(scene,'essence',16,16,c=>glow(c,false));
