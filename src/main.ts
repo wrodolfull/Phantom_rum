@@ -3,7 +3,8 @@ import "./style.css";
 import { setupVisuals, addBackdrop } from "./art/pixelArt";
 import { retroAudio } from "./audio/RetroAudio";
 import { PhantomEffects } from "./effects/PhantomEffects";
-import { CoursePlanner, FIRST_SEGMENT_START, GROUND_Y, WALL_HEIGHT, WARD_HEIGHT, difficulty, type ObstacleKind } from "./world/course";
+import { CoursePlanner, FIRST_SEGMENT_START, GROUND_Y, difficulty, type ObstacleKind } from "./world/course";
+import { canLand, intersectsThing } from "./world/collisions";
 
 const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
@@ -216,22 +217,15 @@ class GameScene extends Phaser.Scene {
     const px=this.distance+PLAYER_X;
     // Floor support depends on the player's CENTER. Overlapping a ledge with
     // one foot cannot magically prevent a fall into an actual pit.
-    const overGap=this.things.some(t=>t.kind==="gap"&&px>=t.x&&px<t.x+t.width);
-    const oldFeet=prevY+25;
-    const newFeet=this.y+25;
-    if(this.vy>=0&&oldFeet<=GROUND+1&&newFeet>=GROUND&&!overGap){
+    if(canLand(prevY,this.y,this.vy,px,this.things)){
       this.y=GROUND-25;this.vy=0;this.motion="grounded";
     }else this.motion=this.vy<0?"jumping":"falling";
     if(this.y>H+30){this.die();return;}
-    // Swept AABB: test the complete movement of the hitbox between fixed steps.
-    // Prevents fast movement from tunnelling through thin spiritual barriers.
-    const left=Math.min(prevX,px)-10,right=Math.max(prevX,px)+10;
-    const top=Math.min(prevY,this.y)+3,bottom=Math.max(prevY,this.y)+24;
+    // Continuous hitbox sweep with shared rules covered by unit tests.
+    const swept={beforeX:prevX,afterX:px,beforeY:prevY,afterY:this.y};
     for(const t of this.things){
       if(t.collected||t.kind==="gap")continue;
-      const intersects=right>t.x&&left<t.x+t.width;
-      const height=t.kind==="wall"?WALL_HEIGHT:t.kind==="ward"?WARD_HEIGHT:30;
-      const touching=intersects&&bottom>GROUND-height&&top<GROUND-(height===30?14:0);
+      const touching=intersectsThing(t,swept);
       if((t.kind==="essence"||t.kind==="orb")&&touching){
         if(t.kind==="orb"){
           this.ep=Math.min(100,this.ep+25);t.collected=true;
