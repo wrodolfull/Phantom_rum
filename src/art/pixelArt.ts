@@ -18,6 +18,7 @@ function make(scene:Phaser.Scene,key:string,w:number,h:number,draw:Draw):void {
 }
 function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number):void {
   const border=phase?C.darkblue:'#4658a2',body=phase?'#8ae7ff':C.white;
+  const bob=[0,-1,0,1,0,-1,-2,0][frame]??0;
   const rows:[[number,number,number],...Array<[number,number,number]>]=[
     [3,13,21],[4,10,24],[5,8,26],[6,7,27],[7,6,28],[8,5,29],
     [9,5,29],[10,5,30],[11,6,30],[12,7,30],[13,6,30],
@@ -26,15 +27,30 @@ function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number):void {
     [24,10,26],[25,8,24],[26,7,15]
   ];
   for(const [y,left,right] of rows){
-    const sy=y+(frame===1?-1:frame===2?1:0);
+    const sy=y+bob;
     dot(c,border,left-1,sy,right-left+2);
     dot(c,body,left+1,sy,right-left-1);
   }
-  dot(c,phase?'#5ac7ed':C.shade,9,21,14,2);
-  dot(c,C.ink,18,12,3,6);dot(c,C.ink,25,12,3,6);
-  dot(c,'#ffffff',18,12,1,2);dot(c,'#ffffff',25,12,1,2);
-  dot(c,'#f3a9c1',23,20,5,2);dot(c,'#c5759d',19,20,3,2);
-  if(phase){dot(c,'#8efbff',0,13,3,2);dot(c,'#8efbff',3,27,2,2);}
+  dot(c,phase?'#5ac7ed':C.shade,9,21+bob,14,2);
+  if(frame===7){
+    // Comic hit face; no gore.
+    dot(c,C.ink,18,13,4,2);dot(c,C.ink,19,12,2,4);
+    dot(c,C.ink,25,13,4,2);dot(c,C.ink,26,12,2,4);
+    dot(c,'#f3a9c1',23,20,3,4);
+  }else if(frame===4){
+    dot(c,C.ink,18,16+bob,4,1);dot(c,C.ink,25,16+bob,4,1);
+    dot(c,'#f3a9c1',23,20+bob,5,2);
+  }else{
+    dot(c,C.ink,18,12+bob,3,6);dot(c,C.ink,25,12+bob,3,6);
+    dot(c,'#ffffff',18,12+bob,1,2);dot(c,'#ffffff',25,12+bob,1,2);
+    dot(c,'#f3a9c1',23,20+bob,5,2);dot(c,'#c5759d',19,20+bob,3,2);
+  }
+  if(frame===6)dot(c,phase?'#50e4f5':'#d3dbf8',6,24,7,3);
+  if(phase){
+    const trail=(frame%3)*2;
+    dot(c,'#8efbff',0,13+bob,3+trail,2);
+    dot(c,'#8efbff',3,27+bob,2+trail,2);
+  }
 }
 function wall(c:CanvasRenderingContext2D):void {
   dot(c,'#536081',0,0,26,40);dot(c,C.stone,2,2,22,36);
@@ -133,10 +149,13 @@ function lamp(c:CanvasRenderingContext2D):void {
   dot(c,'#383254',16,13,2,13);
 }
 export function setupVisuals(scene:Phaser.Scene):void {
-  for(let i=0;i<3;i++){
+  for(let i=0;i<6;i++){
     make(scene,'phantom-'+i,32,32,c=>ghost(c,false,i));
     make(scene,'phantom-phase-'+i,32,32,c=>ghost(c,true,i));
   }
+  make(scene,'phantom-jump',32,32,c=>ghost(c,false,6));
+  make(scene,'phantom-phase-jump',32,32,c=>ghost(c,true,6));
+  make(scene,'phantom-hurt',32,32,c=>ghost(c,false,7));
   make(scene,'grave',24,32,grave);
   make(scene,'wall',26,40,wall);
   make(scene,'ward',18,50,ward);

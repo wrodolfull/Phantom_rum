@@ -18,8 +18,10 @@ Abra a URL impressa pelo Vite. Para build de produção, execute `npm run build`
 | --- | --- | --- |
 | Pular | Espaço ou ↑ | Toque na metade esquerda |
 | Intangibilidade | Segurar Shift | Segurar a metade direita |
-| Pausar | Esc | Disponível via teclado (botão touch planejado) |
+| Pausar | Esc | Botão II no topo |
 | Reiniciar após morte | Espaço | Toque na tela |
+| Música | M ou botão ♫ | Botão ♫ |
+| Efeitos | N ou botão ♪ | Botão ♪ |
 
 ## Mecânicas
 - Corrida automática e velocidade progressiva.
@@ -28,6 +30,16 @@ Abra a URL impressa pelo Vite. Para build de produção, execute `npm run build`
 - Barreiras espirituais que exigem a forma física.
 - Abismos, Essência, orbes e recorde persistido no navegador.
 - Geração de obstáculos e Game Over.
+
+## Visual e áudio 0.3
+- Phantom com seis quadros de flutuação por estado, sprite de salto e expressão de impacto.
+- Partículas pixeladas na intangibilidade, salto, coleta e colisão; sacudida e flashes sutis.
+- Trilha chiptune original sintetizada com Web Audio após interação do usuário.
+- Efeitos sonoros de salto, intangibilidade, coleta, perda e novo recorde.
+- Botões de música/efeitos com preferências persistentes, botão de pausa para mobile.
+- Efeitos leves desenhados com um único Phaser Graphics; nenhum arquivo de áudio externo.
+
+Confira [docs/audio-effects.md](docs/audio-effects.md) para os testes e detalhes de áudio.
 
 ## Visual 0.2
 - Personagem Phantom desenhado em pixel art, com animação de flutuação e modo intangível.
