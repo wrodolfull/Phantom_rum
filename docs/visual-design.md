@@ -14,8 +14,8 @@ Pixel art 2D em resolução nativa, inspirada na linguagem de aventuras de port�
 
 ## Componentes visuais
 Os sprites são gerados em Canvas por `src/art/pixelArt.ts` e registrados como texturas do Phaser, com filtragem sem suavização.
-- Phantom físico: 32×32, três quadros de flutuação.
-- Phantom intangível: 32×32, três quadros azuis/translúcidos.
+- Phantom físico: 32×32, seis quadros de flutuação e sprites específicos de salto/impacto.
+- Phantom intangível: 32×32, seis quadros azuis/translúcidos e variante aérea.
 - Lápide: 24×32; parede: 26×40; barreira espectral: 18×50.
 - Essência e orbe: 16×16.
 - Chão: tile 16×16.
