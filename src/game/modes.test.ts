@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {CHASE_START_PX,CHASE_END_PX,shouldStartChase,chaseCompleted,mergeRun,asRunStats,
+import {CHASE_START_PX,CHASE_END_PX,CHASE_MIN_PLAY_SECONDS,CHASE_WORLD_SPEED,shouldStartChase,chaseCompleted,mergeRun,asRunStats,
   chaseCollision,waveAt,type RunSnapshot} from "./modes";
 const base:RunSnapshot={distancePx:8000,energy:84,essence:7,jumps:10,phases:3,walls:2,
   orbs:1,forceTutorial:false,chaseDone:false};
@@ -14,16 +14,19 @@ describe("2D ↔ 3D transition director",()=>{
     expect(shouldStartChase({...gate,nearestHazardPx:120})).toBe(false);
     expect(shouldStartChase({...gate,chaseDone:true})).toBe(false);
   });
-  it("returns to the 2D runner at 1150m, maintaining energy and Essência",()=>{
-    expect(chaseCompleted(CHASE_END_PX-1)).toBe(false);
-    expect(chaseCompleted(CHASE_END_PX)).toBe(true);
+  it("returns only after 1300m and at least 18 seconds, preserving resources",()=>{
+    expect(chaseCompleted(CHASE_END_PX-1,CHASE_MIN_PLAY_SECONDS+5)).toBe(false);
+    expect(chaseCompleted(CHASE_END_PX,.9)).toBe(false);
+    expect(chaseCompleted(CHASE_END_PX,CHASE_MIN_PLAY_SECONDS-0.01)).toBe(false);
+    expect(chaseCompleted(CHASE_END_PX,CHASE_MIN_PLAY_SECONDS)).toBe(true);
+    expect((CHASE_END_PX-CHASE_START_PX)/CHASE_WORLD_SPEED).toBeGreaterThan(19);
     const resumed=mergeRun(base,{distancePx:CHASE_END_PX,essence:12,energy:47,jumps:14});
-    expect(resumed.distancePx).toBe(11500);
+    expect(resumed.distancePx).toBe(13000);
     expect(resumed.essence).toBe(12);
     expect(resumed.energy).toBe(47);
     expect(resumed.phases).toBe(3);
     expect(resumed.chaseDone).toBe(true);
-    expect(asRunStats(resumed).meters).toBe(1150);
+    expect(asRunStats(resumed).meters).toBe(1300);
     expect(shouldStartChase({distancePx:12500,grounded:true,physical:true,
       chaseDone:resumed.chaseDone,nearestHazardPx:200})).toBe(false);
   });

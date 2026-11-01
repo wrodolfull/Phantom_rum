@@ -114,3 +114,12 @@ Detalhes: [docs/3d-chase.md](docs/3d-chase.md).
 
 ### Próxima mecânica planejada: incorporação do morcego
 Um morcego especial terá janela de captura sincronizada por um anel pulsante. Ao acertar, Phantom voará por um trecho aéreo de coleta de Essência e retornará ao chão. O conceito está em [docs/bat-possession-roadmap.md](docs/bat-possession-roadmap.md). **Ainda não está implementado.**
+
+## Correção da perseguição curta (MVP 0.9.1)
+- A fase 3D agora acontece até **1.300 metros**, com pelo menos **18 segundos de jogabilidade ativa** antes do retorno ao 2D.
+- O Phaser 2D usa Canvas para reservar WebGL para o Three.js em celulares.
+- Se o 3D não puder iniciar, há uma perseguição **2.5D de compatibilidade**, jogável e com os mesmos controles — sem voltar imediatamente ao runner.
+- Dados da partida são preservados ao retornar em qualquer modo.
+- Use `?test_chase=1` para testar a perseguição sem precisar alcançar 800 metros.
+
+Confira [docs/3d-chase-fix.md](docs/3d-chase-fix.md).

@@ -6,7 +6,7 @@ import {activeAppearance} from "../shop/economy";
 import {heroById} from "../shop/catalog";
 import {ChaseInput} from "../input/ChaseInput";
 import {
-  CHASE_END_PX,chaseCompleted,mergeRun,asRunStats,chaseCollision,waveAt,
+  CHASE_END_PX,CHASE_WORLD_SPEED,chaseCompleted,mergeRun,asRunStats,chaseCollision,waveAt,
   type ChaseObject,type ChaseObstacleKind,type RunSnapshot
 } from "../game/modes";
 
@@ -42,6 +42,8 @@ export class ChaseScene extends Phaser.Scene {
   private jumpHeight=0;
   private jumpVelocity=0;
   private timeAlive=0;
+  private activeSeconds=0;
+  private fallbackStarted=false;
   private spawnClock=0;
   private spawnIndex=0;
   private hunterPressure=.16;
@@ -68,6 +70,7 @@ export class ChaseScene extends Phaser.Scene {
   async create(){
     this.lane=1;this.jumpHeight=0;this.jumpVelocity=0;this.timeAlive=0;
     this.spawnClock=0;this.spawnIndex=0;this.hunterPressure=.16;
+    this.activeSeconds=0;this.fallbackStarted=false;
     this.intangible=false;this.heldPhase=false;this.phaseLocked=false;
     this.paused=false;this.returning=false;this.returningTime=0;
     this.ready=false;this.ended=false;this.hudClock=0;this.hitFlash=0;
@@ -85,10 +88,25 @@ export class ChaseScene extends Phaser.Scene {
       this.createWorld(THREE);
       this.ready=true;
     }catch(error){
-      console.warn("Chase 3D unavailable: preserving progress in the 2D runner",error);
-      if(this.sys.isActive())this.scene.start("game",{resume:this.run});
+      this.useCompatibilityMode(error);
     }
   }
+  /** Never skip the 3D segment merely because a GPU/driver rejected WebGL. */
+  private useCompatibilityMode(error:unknown){
+    if(this.fallbackStarted||!this.sys.isActive())return;
+    this.fallbackStarted=true;
+    console.warn("[Phantom Run] 3D renderer unavailable; using playable 2.5D chase",error);
+    this.ready=false;
+    this.gesture?.clear();
+    this.scene.start("chase-fallback",{
+      run:{...this.run,energy:this.run.energy,chaseDone:true},
+      reason:error instanceof Error?error.message:String(error)
+    });
+  }
+  private onContextLost=(event:Event)=>{
+    event.preventDefault();
+    this.useCompatibilityMode("WebGL context lost during chase");
+  };
   private createHud(){
     const ui=document.createElement("div");
     ui.id="chase-ui";
@@ -188,6 +206,7 @@ export class ChaseScene extends Phaser.Scene {
     renderer.outputColorSpace=THREE.SRGBColorSpace;
     renderer.domElement.className="chase-three-canvas";
     renderer.domElement.style.pointerEvents="none";
+    renderer.domElement.addEventListener("webglcontextlost",this.onContextLost,false);
     document.getElementById("game")?.appendChild(renderer.domElement);
     this.threeRenderer=renderer;this.world=world;this.camera=camera;
     world.add(new THREE.AmbientLight(0xb1addb,1.6));
@@ -371,8 +390,10 @@ export class ChaseScene extends Phaser.Scene {
     }
     this.tick(dt);
     // A scene switch can synchronously dispose the Three renderer.
-    if(this.ready&&this.threeRenderer&&this.world&&this.camera)
-      this.threeRenderer.render(this.world,this.camera);
+    if(this.ready&&this.threeRenderer&&this.world&&this.camera){
+      try{this.threeRenderer.render(this.world,this.camera);}
+      catch(error){this.useCompatibilityMode(error);}
+    }
   }
   private tick(dt:number){
     this.timeAlive+=dt;
@@ -415,7 +436,8 @@ export class ChaseScene extends Phaser.Scene {
       this.hunter!.position.z=7-this.hunterPressure*3.8;
       this.hunter!.rotation.z=Math.sin(this.timeAlive*11)*.035;
       this.hunterPressure=Math.max(.11,this.hunterPressure-.017*dt);
-      this.run.distancePx+=255*dt;
+      this.activeSeconds+=dt;
+      this.run.distancePx+=CHASE_WORLD_SPEED*dt;
       this.spawnClock+=dt;
       if(this.spawnClock>=1.55){
         this.spawnClock-=1.55;this.spawnWave();
@@ -447,7 +469,7 @@ export class ChaseScene extends Phaser.Scene {
         this.world!.remove(h.model);this.disposeObject(h.model);return false;
       });
       if(this.hunterPressure>=1){this.captured();return;}
-      if(chaseCompleted(this.run.distancePx))this.beginReturn();
+      if(chaseCompleted(this.run.distancePx,this.activeSeconds))this.beginReturn();
     }else{
       this.returningTime+=dt;
       if(this.returningTime>.72){
@@ -521,6 +543,7 @@ export class ChaseScene extends Phaser.Scene {
       this.world.clear();this.world=undefined;
     }
     if(this.threeRenderer){
+      this.threeRenderer.domElement.removeEventListener("webglcontextlost",this.onContextLost);
       this.threeRenderer.domElement.remove();
       this.threeRenderer.dispose();this.threeRenderer.forceContextLoss();
       this.threeRenderer=undefined;
