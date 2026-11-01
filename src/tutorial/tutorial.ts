@@ -11,12 +11,12 @@ export function tutorialHint(playerX:number,enabled:boolean):Hint{
   if(playerX<WALL-190)
     return {step:"welcome",text:"PHANTOM CORRE SOZINHO. PREPARE-SE!",completed:false};
   if(playerX<WALL+26+12)
-    return {step:"phase",text:"SEGURE SHIFT OU O LADO DIREITO PARA ATRAVESSAR!",completed:false};
+    return {step:"phase",text:"SEGURE O TOQUE / MOUSE OU SHIFT PARA ATRAVESSAR!",completed:false};
   if(playerX<ORB-120)
-    return {step:"release",text:"SOLTE O BOTÃO PARA RECUPERAR ENERGIA.",completed:false};
+    return {step:"release",text:"SOLTE PARA VOLTAR AO NORMAL E RECUPERAR ENERGIA.",completed:false};
   if(playerX<ORB+18)
     return {step:"orb",text:"ORBES AZUIS RECARREGAM SUA ENERGIA.",completed:false};
   if(playerX<GAP+44+22)
-    return {step:"jump",text:"ESPAÇO OU TOQUE À ESQUERDA PARA PULAR!",completed:false};
+    return {step:"jump",text:"TOQUE RÁPIDO OU CLIQUE PARA PULAR! (ESPAÇO)",completed:false};
   return {step:"done",text:"TUTORIAL CONCLUÍDO! BOA CORRIDA.",completed:true};
 }
