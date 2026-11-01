@@ -3,7 +3,9 @@
  * 10 horizontal world pixels = 1 game meter (consistent with existing scores).
  */
 export const CHASE_START_PX=8000;   // 800 meters
-export const CHASE_END_PX=11500;   // 1150 meters
+export const CHASE_END_PX=13000;   // 1300 meters
+export const CHASE_MIN_PLAY_SECONDS=18;
+export const CHASE_WORLD_SPEED=255;
 export interface RunSnapshot {
   distancePx:number;
   energy:number;
@@ -29,8 +31,9 @@ export function shouldStartChase(input:ChaseGate):boolean{
     input.grounded && input.physical &&
     input.nearestHazardPx>=145;
 }
-export function chaseCompleted(distancePx:number):boolean{
-  return distancePx>=CHASE_END_PX;
+/** Distance AND active chase play time must be met, never a loading/fade frame. */
+export function chaseCompleted(distancePx:number,activeSeconds:number=Infinity):boolean{
+  return distancePx>=CHASE_END_PX && activeSeconds>=CHASE_MIN_PLAY_SECONDS;
 }
 export function mergeRun(before:RunSnapshot,after:Partial<RunSnapshot>):RunSnapshot {
   return {
