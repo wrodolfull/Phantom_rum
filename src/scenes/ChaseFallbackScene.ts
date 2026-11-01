@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import {ChaseInput} from "../input/ChaseInput";
+import {reportMode,reportChaseSeconds} from "../game/diagnostics";
 import {progressStore} from "../progression/progress";
 import {retroAudio} from "../audio/RetroAudio";
 import {setupVisuals,ensureAppearanceVisuals,appearanceTexture} from "../art/pixelArt";
@@ -62,6 +63,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
     this.reason=data.reason??"";
   }
   create(){
+    reportMode("chase-compat",this.reason||"fallback renderer");
     this.lane=1;this.playerX=W/2;this.jumping=0;this.jumpSpeed=0;
     this.intangible=false;this.heldPhase=false;this.phaseLocked=false;
     this.waveIndex=0;this.waves=[];this.spawnClock=0;
@@ -185,6 +187,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
         Math.min(1,delta*12));
       this.pressure=Math.max(.11,this.pressure-.017*delta);
       this.activeSeconds+=delta;
+      reportChaseSeconds(this.activeSeconds);
       this.run.distancePx+=CHASE_WORLD_SPEED*delta;
       this.spawnClock+=delta;
       if(this.spawnClock>=1.55){
