@@ -65,7 +65,10 @@ class MenuScene extends Phaser.Scene {
     music.on("pointerdown",()=>{retroAudio.toggleMusic();refresh();});
     sound.on("pointerdown",()=>{retroAudio.toggleEffects();refresh();});
     refresh();
-    this.add.text(W/2,261,"ESPAÇO: PULAR    SHIFT: ATRAVESSAR",
+    const isTouch=window.matchMedia?.("(pointer: coarse)").matches??false;
+    this.add.text(W/2,261,isTouch
+      ?"TOQUE PULAR OU SEGURE ATRAVESSAR"
+      :"ESPAÇO: PULAR    SHIFT: ATRAVESSAR",
       {fontFamily:"monospace",fontSize:"8px",color:"#bcb6e3"}).setOrigin(.5);
   }
 }
