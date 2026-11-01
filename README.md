@@ -49,7 +49,7 @@ Confira [docs/audio-effects.md](docs/audio-effects.md) para os testes e detalhes
 
 Veja [docs/visual-design.md](docs/visual-design.md) e [src/art/pixelArt.ts](src/art/pixelArt.ts).
 
-**Em desenvolvimento:** os sprites ainda são um primeiro passe e o gerador procedural não possui validador formal; recomenda-se playtest e checagem do CI antes de produção.
+**Em desenvolvimento:** a arte continua sendo o primeiro passe. Há validação numérica conservadora para segmentos procedurais, mas ainda são necessários playtests reais no navegador e no celular.
 
 ## Jogabilidade e testes (MVP 0.4)
 - Segmentos procedurais em quatro níveis com validação de energia, alcance de salto e tempo de reação.
@@ -57,3 +57,13 @@ Veja [docs/visual-design.md](docs/visual-design.md) e [src/art/pixelArt.ts](src/
 - Muros físicos altos exigem intangibilidade; abismos possuem física de apoio corrigida e barreiras têm colisões varridas.
 - Testes automatizados de sementes, soluções e colisões: `npm test`.
 - Consulte [docs/course-validation.md](docs/course-validation.md).
+
+## Tutorial, Game Over e conquistas (MVP 0.5)
+- Tutorial da primeira partida com avisos contextuais antes dos desafios, sem pausar a corrida.
+- Repetição por **COMO JOGAR** no menu; conclusão memorizada após o primeiro abismo.
+- Nova tela de resultados com recorde, Essência, meta de distância, conquistas e botões de reinício/menu.
+- Galeria com oito conquistas, progresso acumulado e persistência local.
+- Migração automática do antigo recorde `phantom-run-best-v1`.
+- Regras de progresso e tutorial cobertas por testes automatizados (`npm test`).
+
+Consulte [docs/onboarding-achievements.md](docs/onboarding-achievements.md).
