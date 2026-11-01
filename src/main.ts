@@ -3,7 +3,8 @@ import "./style.css";
 import {setupVisuals,addBackdrop,ensureAppearanceVisuals,appearanceTexture} from "./art/pixelArt";
 import { retroAudio } from "./audio/RetroAudio";
 import { PhantomEffects } from "./effects/PhantomEffects";
-import { CoursePlanner, FIRST_SEGMENT_START, GROUND_Y, difficulty, type ObstacleKind } from "./world/course";
+import {CoursePlanner,FIRST_SEGMENT_START,GROUND_Y,difficulty,
+  requiresIntangible,requiresPhysical,type ObstacleKind} from "./world/course";
 import { canLand, intersectsThing } from "./world/collisions";
 import {progressStore,type RunStats} from "./progression/progress";
 import {tutorialHint} from "./tutorial/tutorial";
@@ -11,7 +12,7 @@ import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
 import {ShopScene} from "./scenes/ShopScene";
 import {activeAppearance} from "./shop/economy";
 import type {HeroId,AccessoryId} from "./shop/catalog";
-import {mountTouchControls,type TouchBinding} from "./input/touchControls";
+import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
 
 // The orientation reminder is dismissible without blocking portrait fallback.
@@ -67,8 +68,8 @@ class MenuScene extends Phaser.Scene {
     refresh();
     const isTouch=window.matchMedia?.("(pointer: coarse)").matches??false;
     this.add.text(W/2,261,isTouch
-      ?"TOQUE PULAR OU SEGURE ATRAVESSAR"
-      :"ESPAÇO: PULAR    SHIFT: ATRAVESSAR",
+      ?"TOQUE = PULA    SEGURAR = INTANGÍVEL"
+      :"CLIQUE = PULA   SEGURAR = INTANGÍVEL",
       {fontFamily:"monospace",fontSize:"8px",color:"#bcb6e3"}).setOrigin(.5);
   }
 }
@@ -92,8 +93,10 @@ class GameScene extends Phaser.Scene {
   private pauseButton!: Phaser.GameObjects.Text;
   private musicButton!: Phaser.GameObjects.Text;
   private effectsButton!: Phaser.GameObjects.Text;
-  private touch!: TouchBinding;
-  private htmlPhaseHeld=false;
+  private gesture!:GestureInput;
+  private gesturePhaseHeld=false;
+  private speedLines!:Phaser.GameObjects.Graphics;
+  private lastRegion=-1;
   private performance=new FrameMonitor();
   private performanceText?:Phaser.GameObjects.Text;
   private performanceUpdate=0;
@@ -102,7 +105,7 @@ class GameScene extends Phaser.Scene {
   private elapsed=0;
   private things: Thing[]=[];
   private distance=0;
-  private speed=125;
+  private speed=160;
   private ep=100;
   private y=GROUND-25;
   private vy=0;
@@ -117,7 +120,6 @@ class GameScene extends Phaser.Scene {
   private score=0;
   private spawnAt=FIRST_SEGMENT_START;
   private planner!: CoursePlanner;
-  private rightPointers=new Set<number>();
   private tierLabel!: Phaser.GameObjects.Text;
   private tutorialBanner!: Phaser.GameObjects.Text;
   private tutorialEnabled=false;
@@ -128,12 +130,12 @@ class GameScene extends Phaser.Scene {
   private walls=0;
   private orbs=0;
   private acc=0;
-  private rightHeld=false;
   private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key};
   constructor(){super("game");}
   init(data?:{forceTutorial?:boolean}){this.forceTutorial=data?.forceTutorial===true;}
   create(){
-    this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.rightHeld=false;this.rightPointers.clear();this.planner=new CoursePlanner(Date.now());this.elapsed=0;this.htmlPhaseHeld=false;
+    this.things=[];this.distance=0;this.speed=160;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.planner=new CoursePlanner(Date.now());
+    this.elapsed=0;this.gesturePhaseHeld=false;this.lastRegion=-1;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
@@ -145,6 +147,7 @@ class GameScene extends Phaser.Scene {
     ensureAppearanceVisuals(this,this.heroId,this.accessoryId);
     this.groundTiles=this.add.tileSprite(0, 211, W, H-211, "ground").setOrigin(0,0).setDepth(2);
     this.world=this.add.graphics().setDepth(3);
+    this.speedLines=this.add.graphics().setDepth(1);
     this.phantom=this.add.image(PLAYER_X,this.y+16,
       appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
     this.particles=new PhantomEffects(this);
@@ -169,21 +172,17 @@ class GameScene extends Phaser.Scene {
     this.effectsButton.on("pointerdown",()=>{retroAudio.toggleEffects();this.refreshControls();});
     this.pauseButton.on("pointerdown",()=>this.togglePause());
     this.refreshControls();
-    // Larger native buttons for coarse pointers, separate from Phaser's canvas input.
-    this.touch=mountTouchControls({
-      jump:()=>{if(this.alive&&!this.paused)this.jumpQueued=.1;},
-      phase:(pressed)=>{this.htmlPhaseHeld=pressed;},
-      pause:()=>this.togglePause()
+    // Canvas-wide input: tap to jump, hold to phase. No on-screen action buttons.
+    this.gesture=new GestureInput({
+      jump:()=>{if(this.alive&&!this.paused)this.jumpQueued=.12;},
+      phase:(held)=>{this.gesturePhaseHeld=held;}
     });
-    this.touch.setPaused(false);
-    const pauseForBackground=()=>{
-      if(this.alive&&!this.paused)this.togglePause();
-    };
+    const pauseForBackground=()=>{if(this.alive&&!this.paused)this.togglePause();};
     const onVisibility=()=>{if(document.hidden)pauseForBackground();};
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("blur",pauseForBackground);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
-      this.touch.destroy();
+      this.gesture.clear();
       document.removeEventListener("visibilitychange",onVisibility);
       window.removeEventListener("blur",pauseForBackground);
     });
@@ -193,21 +192,21 @@ class GameScene extends Phaser.Scene {
         backgroundColor:"#1a1a35",padding:{x:4,y:2}
       }).setOrigin(.5,1).setDepth(26);
     }
-    this.input.addPointer(2);
-    this.input.on("pointerdown",(p:Phaser.Input.Pointer)=>{
-      // HUD buttons are separate interactive targets and must not also jump/restart.
-      if(p.y<46)return;
-      if(!this.alive){this.scene.restart();return;}
-      if(this.paused)return;
-      if(p.x < W/2){this.jumpQueued=.1;}
-      else {this.rightPointers.add(p.id);this.rightHeld=true;}
+    this.input.addPointer(3);
+    this.input.on("pointerdown",(p:Phaser.Input.Pointer,over:Phaser.GameObjects.GameObject[])=>{
+      // HUD actions and the small top region are not jump/phase gestures.
+      if(!this.alive||this.paused||p.y<44||over.length>0)return;
+      this.gesture.press(p.id,p.x,p.y,performance.now());
     });
-    const release=(p:Phaser.Input.Pointer)=>{
-      this.rightPointers.delete(p.id);
-      this.rightHeld=this.rightPointers.size>0;
-    };
-    this.input.on("pointerup",release);
-    this.input.on("pointerupoutside",release);
+    this.input.on("pointermove",(p:Phaser.Input.Pointer)=>{
+      this.gesture.move(p.id,p.x,p.y);
+    });
+    this.input.on("pointerup",(p:Phaser.Input.Pointer)=>{
+      this.gesture.release(p.id,performance.now());
+    });
+    this.input.on("pointerupoutside",(p:Phaser.Input.Pointer)=>{
+      this.gesture.cancel(p.id);
+    });
     // Preload only the segment(s) actually needed ahead of the player.
     while(this.spawnAt<W+240)this.generate();
   }
@@ -235,11 +234,11 @@ class GameScene extends Phaser.Scene {
     for(const item of segment.objects){
       const thing:Thing={...item};
       if(item.kind!=="gap"){
-        const key=item.kind==="wall"?"wall":item.kind==="ward"?"ward":
-          item.kind==="orb"?"orb":"essence";
-        const y=(item.kind==="orb"||item.kind==="essence")?GROUND-22:GROUND;
+        const key=item.kind;
+        const collectible=item.kind==="orb"||item.kind==="essence";
+        const y=collectible?GROUND-22:item.kind==="bat"?GROUND-14:GROUND;
         thing.sprite=this.add.image(item.x+item.width/2,y,key)
-          .setOrigin(.5,(item.kind==="orb"||item.kind==="essence")?.5:1)
+          .setOrigin(.5,collectible?.5:1)
           .setDepth(5);
       }
       this.things.push(thing);
@@ -255,7 +254,7 @@ class GameScene extends Phaser.Scene {
     retroAudio.pause(this.paused);
     this.pauseButton.setText(this.paused?"▶":"Ⅱ");
     this.overlay.setText(this.paused?"PAUSADO\n\nESC OU ▶ PARA CONTINUAR":"").setVisible(this.paused);
-    this.touch?.setPaused(this.paused);
+    this.gesture?.clear();
   }
   update(_time:number,delta:number){
     const jump=Phaser.Input.Keyboard.JustDown(this.keys.space)||Phaser.Input.Keyboard.JustDown(this.keys.up);
@@ -268,6 +267,7 @@ class GameScene extends Phaser.Scene {
     if(Phaser.Input.Keyboard.JustDown(this.keys.music)){retroAudio.toggleMusic();this.refreshControls();}
     if(Phaser.Input.Keyboard.JustDown(this.keys.effects)){retroAudio.toggleEffects();this.refreshControls();}
     if(this.paused)return;
+    this.gesture.update(performance.now());
     if(jump)this.jumpQueued=.1;
     if(showDebug){
       this.performance.record(delta);
@@ -288,7 +288,7 @@ class GameScene extends Phaser.Scene {
   private step(dt:number){
     this.elapsed+=dt;
     const previousMaterial=this.material;
-    this.holdIntangible=this.keys.shift.isDown||this.rightHeld||this.htmlPhaseHeld;
+    this.holdIntangible=this.keys.shift.isDown||this.gesturePhaseHeld;
     if(!this.holdIntangible)this.needsRelease=false;
     if(this.material==="intangible"){
       this.ep=Math.max(0,this.ep-DRAIN*dt);
@@ -330,7 +330,8 @@ class GameScene extends Phaser.Scene {
     const swept={beforeX:prevX,afterX:px,beforeY:prevY,afterY:this.y};
     for(const t of this.things){
       if(t.collected||t.kind==="gap")continue;
-      const touching=intersectsThing(t,swept);
+      const bob=t.kind==="bat"?Math.round(-5+8*Math.sin(this.elapsed*4+t.x*.014)):0;
+      const touching=intersectsThing(t,swept,bob);
       if((t.kind==="essence"||t.kind==="orb")&&touching){
         if(t.kind==="orb"){
           this.ep=Math.min(100,this.ep+25);t.collected=true;this.orbs++;
@@ -339,8 +340,11 @@ class GameScene extends Phaser.Scene {
           this.score++;t.collected=true;
           this.particles.burst("collect",PLAYER_X+8,this.y+10,10);retroAudio.play("collect");
         }
-      }else if(touching&&t.kind==="wall"&&this.material==="physical"){this.die();return;}
-      else if(touching&&t.kind==="ward"&&this.material==="intangible"){this.die();return;}
+      }else if(touching&&requiresIntangible(t.kind)&&this.material==="physical"){
+        this.die();return;
+      }else if(touching&&requiresPhysical(t.kind)&&this.material==="intangible"){
+        this.die();return;
+      }
     }
     for(const t of this.things){
       if(t.kind==="wall"&&!t.counted&&px-10>t.x+t.width){t.counted=true;this.walls++;}
@@ -372,9 +376,27 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial});
   }
   private draw(){
-    this.backdrop.mountains.tilePositionX=this.distance*.08;
-    this.backdrop.forest.tilePositionX=this.distance*.23;
+    // Parallax depth and moving near-camera details communicate increasing pace.
+    this.backdrop.mountains.tilePositionX=this.distance*.16;
+    this.backdrop.forest.tilePositionX=this.distance*.37;
+    this.backdrop.graves.tilePositionX=this.distance*.78;
+    this.backdrop.debris.tilePositionX=this.distance*1.3;
+    const region=Math.floor(this.distance/2200)%3;
+    if(region!==this.lastRegion){
+      const palettes=[0xffffff,0xceb4f5,0xa2ced6];
+      this.backdrop.forest.setTint(palettes[region]);
+      this.backdrop.graves.setTint(palettes[region]);
+      this.lastRegion=region;
+    }
     this.groundTiles.tilePositionX=this.distance;
+    this.speedLines.clear();
+    for(let i=0;i<12;i++){
+      const track=W+45;
+      const x=((i*71-this.distance*1.42)%track+track)%track;
+      const y=169+(i*23)%43;
+      this.speedLines.fillStyle(0xbee1ee,.13+(this.speed-160)/950);
+      this.speedLines.fillRect(Math.floor(x),y,Math.floor(8+this.speed/12),1);
+    }
     const g=this.world;
     g.clear();
     for(const t of this.things){
@@ -387,6 +409,8 @@ class GameScene extends Phaser.Scene {
         t.sprite.setX(Math.round(x+t.width/2)).setVisible(!t.collected);
         if(t.kind==="orb"||t.kind==="essence")
           t.sprite.setY(GROUND-29+Math.round(Math.sin(this.distance/30+t.x)*2));
+        else if(t.kind==="bat")
+          t.sprite.setY(GROUND-14+Math.round(-5+8*Math.sin(this.elapsed*4+t.x*.014)));
       }
     }
     const frame=Math.floor(this.elapsed*9)%6;
