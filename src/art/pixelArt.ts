@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import {heroById,type HeroId,type AccessoryId} from '../shop/catalog';
 
 // Sprites originais em resolução nativa: sem imagens externas ou material licenciado.
 const C = {
@@ -16,8 +17,11 @@ function make(scene:Phaser.Scene,key:string,w:number,h:number,draw:Draw):void {
   const c=canvas.getContext('2d');if(!c)return;
   c.imageSmoothingEnabled=false;draw(c);scene.textures.addCanvas(key,canvas);
 }
-function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number):void {
-  const border=phase?C.darkblue:'#4658a2',body=phase?'#8ae7ff':C.white;
+function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number,
+  heroId:HeroId="phantom",accessoryId:AccessoryId="none"):void {
+  const palette=heroById(heroId);
+  const border=phase?C.darkblue:palette.outline;
+  const body=phase?"#8ae7ff":palette.body;
   const bob=[0,-1,0,1,0,-1,-2,0][frame]??0;
   const rows:[[number,number,number],...Array<[number,number,number]>]=[
     [3,13,21],[4,10,24],[5,8,26],[6,7,27],[7,6,28],[8,5,29],
@@ -31,7 +35,14 @@ function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number):void {
     dot(c,border,left-1,sy,right-left+2);
     dot(c,body,left+1,sy,right-left-1);
   }
-  dot(c,phase?'#5ac7ed':C.shade,9,21+bob,14,2);
+  dot(c,phase?'#5ac7ed':palette.shadow,9,21+bob,14,2);
+  if(heroId!=="phantom"){
+    dot(c,phase?"#b4f6ff":palette.accent,11,23+bob,4,2);
+    if(heroId==="wisp")dot(c,"#fffbe6",7,14+bob,2,2);
+    if(heroId==="luna")dot(c,"#ffffff",28,10+bob,2,2);
+    if(heroId==="boozer")dot(c,"#da8e65",4,23+bob,3,2);
+    if(heroId==="spectra")dot(c,"#ef9bc6",13,9+bob,3,2);
+  }
   if(frame===7){
     // Comic hit face; no gore.
     dot(c,C.ink,18,13,4,2);dot(c,C.ink,19,12,2,4);
@@ -50,6 +61,20 @@ function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number):void {
     const trail=(frame%3)*2;
     dot(c,'#8efbff',0,13+bob,3+trail,2);
     dot(c,'#8efbff',3,27+bob,2+trail,2);
+  }
+  if(accessoryId==="ribbon"){
+    dot(c,"#a64472",21,5+bob,2,6);
+    dot(c,"#f4829c",16,5+bob,5,4);dot(c,"#f4829c",23,5+bob,5,4);
+    dot(c,"#ffd9e3",21,6+bob,3,3);
+  }else if(accessoryId==="hat"){
+    dot(c,"#4b387f",8,3+bob,24,4);
+    dot(c,"#785bb3",12,0+bob,15,6);
+    dot(c,"#ffe1a2",13,3+bob,12,2);
+  }else if(accessoryId==="crown"){
+    dot(c,"#af6f33",11,4+bob,20,4);
+    dot(c,"#ffd775",12,1+bob,3,6);dot(c,"#ffd775",19,0+bob,4,8);
+    dot(c,"#ffd775",27,1+bob,3,6);
+    dot(c,"#bcecff",21,5+bob,2,2);
   }
 }
 function wall(c:CanvasRenderingContext2D):void {
@@ -155,6 +180,23 @@ function lamp(c:CanvasRenderingContext2D):void {
   dot(c,'#f0ba67',4,14,13,13);dot(c,'#fff2b3',7,17,6,8);
   dot(c,'#383254',2,26,17,4);dot(c,'#383254',3,13,2,13);
   dot(c,'#383254',16,13,2,13);
+}
+/** Generate only requested combinations. Assets remain 32px pixel-perfect. */
+export function appearanceTexture(hero:HeroId,accessory:AccessoryId,
+  phase:boolean,frame:number|"jump"|"hurt"):string{
+  return `look-${hero}-${accessory}-${phase?"phase":"physical"}-${frame}`;
+}
+export function ensureAppearanceVisuals(scene:Phaser.Scene,hero:HeroId,accessory:AccessoryId):void{
+  for(const phase of [false,true]){
+    for(let i=0;i<6;i++){
+      const key=appearanceTexture(hero,accessory,phase,i);
+      make(scene,key,32,32,c=>ghost(c,phase,i,hero,accessory));
+    }
+    const key=appearanceTexture(hero,accessory,phase,"jump");
+    make(scene,key,32,32,c=>ghost(c,phase,6,hero,accessory));
+  }
+  make(scene,appearanceTexture(hero,accessory,false,"hurt"),32,32,
+    c=>ghost(c,false,7,hero,accessory));
 }
 export function setupVisuals(scene:Phaser.Scene):void {
   for(let i=0;i<6;i++){
