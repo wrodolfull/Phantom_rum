@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import {heroById,type HeroId,type AccessoryId} from '../shop/catalog';
 
 // Sprites originais em resolução nativa: sem imagens externas ou material licenciado.
+const GROUND_CEMETERY_Y=215;
 const C = {
   ink:'#31305e', deep:'#171633', moon:'#fff1cb', white:'#fcf7ff',
   shade:'#d6dcf2', blue:'#60d8f8', darkblue:'#2189be',
@@ -75,6 +76,76 @@ function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number,
     dot(c,"#ffd775",12,1+bob,3,6);dot(c,"#ffd775",19,0+bob,4,8);
     dot(c,"#ffd775",27,1+bob,3,6);
     dot(c,"#bcecff",21,5+bob,2,2);
+  }
+}
+function bat(c:CanvasRenderingContext2D):void {
+  // Dark purple bat, coral eyes; never mistaken for a friendly ghost.
+  const ink="#272040",wing="#785a9b",shade="#ac8cc0";
+  dot(c,ink,0,5,10,3);dot(c,ink,18,5,10,3);
+  dot(c,wing,1,3,9,7);dot(c,wing,18,3,9,7);
+  dot(c,shade,2,5,4,2);dot(c,shade,21,5,4,2);
+  dot(c,ink,0,12,4,4);dot(c,ink,24,12,4,4);
+  dot(c,ink,9,4,10,18);dot(c,shade,10,7,8,12);
+  dot(c,ink,10,2,3,5);dot(c,ink,15,2,3,5);
+  dot(c,"#ff8aa3",11,11,2,3);dot(c,"#ff8aa3",16,11,2,3);
+  dot(c,ink,12,18,5,2);dot(c,shade,13,20,2,3);
+}
+function hunter(c:CanvasRenderingContext2D):void {
+  const edge="#30233b",coat="#6c566e";
+  dot(c,edge,5,51,7,7);dot(c,edge,16,51,7,7);
+  dot(c,coat,6,28,16,25);dot(c,"#a98583",9,29,11,8);
+  dot(c,edge,4,25,20,4);dot(c,edge,7,13,15,13);
+  dot(c,"#d2ad88",9,15,11,11);dot(c,edge,10,18,3,3);dot(c,edge,17,18,3,3);
+  dot(c,edge,3,12,22,5);dot(c,coat,7,5,15,11);dot(c,edge,10,2,9,5);
+  dot(c,edge,1,34,7,17);dot(c,edge,21,34,5,16);
+  dot(c,"#e5b466",1,40,7,11);dot(c,"#ffefb2",3,43,3,5);
+  dot(c,"#6b4b7b",9,31,2,18);dot(c,"#6b4b7b",18,31,2,18);
+}
+function wraith(c:CanvasRenderingContext2D):void {
+  const border="#5b3597",body="#b88cff";
+  dot(c,border,7,7,10,39);dot(c,body,8,6,9,33);
+  dot(c,border,5,10,14,26);dot(c,body,6,10,12,24);
+  dot(c,border,2,15,20,21);dot(c,body,3,16,18,17);
+  dot(c,border,5,2,14,15);dot(c,body,7,3,10,13);
+  dot(c,"#3e245c",6,16,4,6);dot(c,"#3e245c",14,16,4,6);
+  dot(c,"#ff82d2",7,17,2,3);dot(c,"#ff82d2",15,17,2,3);
+  dot(c,"#fff3fe",11,28,3,3);
+  dot(c,border,0,30,5,10);dot(c,border,18,32,4,12);
+  dot(c,"#f0c4ff",7,36,4,7);dot(c,"#f0c4ff",14,38,3,8);
+}
+function spikes(c:CanvasRenderingContext2D):void {
+  const base="#423859",metal="#c6a2dc";
+  dot(c,base,0,13,30,4);
+  for(let i=0;i<5;i++){
+    const x=i*6;
+    dot(c,metal,x+2,3,2,10);
+    dot(c,metal,x+1,7,4,7);
+    dot(c,"#f2dafa",x+2,1,1,7);
+    dot(c,"#705b8b",x+4,9,1,5);
+  }
+  dot(c,base,0,15,30,2);
+}
+function nearGraves(c:CanvasRenderingContext2D):void {
+  // High-contrast objects slide quickly to sell player speed.
+  for(let i=0;i<14;i++){
+    const x=i*39+((i%3)*3);
+    dot(c,"#232c48",x+12,30,3,46);
+    dot(c,"#4b5075",x+2,36,22,37);
+    dot(c,"#656282",x+5,36,15,4);
+    dot(c,"#384061",x+10,45,4,14);
+    dot(c,"#2c3356",x+6,73,17,3);
+    if(i%3===0){
+      dot(c,"#37435b",x+26,53,4,23);
+      dot(c,"#45586e",x+23,48,11,7);
+      dot(c,"#667c85",x+25,49,6,2);
+    }
+  }
+}
+function debris(c:CanvasRenderingContext2D):void {
+  for(let i=0;i<35;i++){
+    const x=(i*31)%512;
+    dot(c,i%3===0?"#acd0b2":"#617d8f",x,3+(i%4),4+i%3,2);
+    dot(c,"#817392",x+7,9,4,2);
   }
 }
 function wall(c:CanvasRenderingContext2D):void {
@@ -208,6 +279,12 @@ export function setupVisuals(scene:Phaser.Scene):void {
   make(scene,'phantom-hurt',32,32,c=>ghost(c,false,7));
   make(scene,'grave',24,32,grave);
   make(scene,'wall',26,66,wall);
+  make(scene,'bat',28,24,bat);
+  make(scene,'hunter',26,58,hunter);
+  make(scene,'wraith',22,48,wraith);
+  make(scene,'spikes',30,17,spikes);
+  make(scene,'near-graves',512,76,nearGraves);
+  make(scene,'debris',512,14,debris);
   make(scene,'ward',18,50,ward);
   make(scene,'orb',16,16,c=>glow(c,true));
   make(scene,'essence',16,16,c=>glow(c,false));
@@ -224,9 +301,13 @@ export function addBackdrop(scene:Phaser.Scene,position:number){
   scene.add.image(392,46,'moon').setDepth(-55);
   const mountains=scene.add.tileSprite(0,98,480,120,'mountains').setOrigin(0,0).setDepth(-50);
   const forest=scene.add.tileSprite(0,103,480,118,'forest').setOrigin(0,0).setDepth(-40);
-  mountains.tilePositionX=position*.08;forest.tilePositionX=position*.23;
-  scene.add.image(85,214,'tree').setOrigin(.5,1).setDepth(-20);
-  scene.add.image(272,214,'grave').setOrigin(.5,1).setDepth(-20);
-  scene.add.image(419,214,'lamp').setOrigin(.5,1).setDepth(-20);
-  return {mountains,forest};
+  const graves=scene.add.tileSprite(0,GROUND_CEMETERY_Y-76,480,76,'near-graves')
+    .setOrigin(0,0).setDepth(-16);
+  const debris=scene.add.tileSprite(0,GROUND_CEMETERY_Y-11,480,14,'debris')
+    .setOrigin(0,0).setDepth(-9);
+  mountains.tilePositionX=position*.16;
+  forest.tilePositionX=position*.37;
+  graves.tilePositionX=position*.78;
+  debris.tilePositionX=position*1.3;
+  return {mountains,forest,graves,debris};
 }
