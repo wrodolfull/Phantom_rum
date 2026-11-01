@@ -19,3 +19,38 @@ button:focus-visible{outline:3px solid #91e6ff;outline-offset:3px}
 @media (orientation:portrait) and (max-width:800px){
   :root:not(.portrait-allowed) #orientation-prompt{display:flex}
 }
+
+/* Three.js canvas stays precisely over Phaser's fitted 16:9 canvas. */
+#game canvas.chase-three-canvas{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:100%;height:100%;max-width:100%;max-height:100%;
+  z-index:11;image-rendering:auto;pointer-events:none;
+}
+#chase-ui{position:absolute;inset:0;z-index:19;pointer-events:none;
+  color:#f8f4ff;font-family:monospace;transition:opacity .65s ease;}
+.chase-hud{position:absolute;top:0;left:0;right:0;
+  display:flex;align-items:flex-start;justify-content:space-between;
+  gap:8px;padding:clamp(5px,1.2vw,12px)}
+.chase-left{min-width:130px;background:rgba(25,20,57,.82);
+  border:1px solid #8c74b5;border-radius:6px;padding:5px 7px}
+.chase-label{font-size:clamp(9px,1.65vw,15px);font-weight:800;letter-spacing:.02em;
+  color:#b5f1ff}
+.chase-score{font-size:clamp(10px,1.7vw,16px);margin-top:3px}
+.chase-ep{height:6px;margin-top:5px;background:#343353;border:1px solid #c3b6e2}
+#chase-energy{height:100%;background:#6de3f6;min-width:1px;transition:width .12s linear}
+.chase-right{display:flex;align-items:center;gap:7px}
+.chase-danger{font-size:clamp(8px,1.45vw,13px);background:rgba(25,20,57,.82);
+  border:1px solid #98688f;padding:6px;border-radius:5px;color:#ffb2bb}
+#chase-pause{pointer-events:auto;touch-action:manipulation;background:#353059;
+  color:#fefbff;border:1px solid #beb3de;border-radius:5px;cursor:pointer;
+  font:bold clamp(11px,2vw,19px) monospace;min-width:32px;min-height:30px}
+.chase-message{position:absolute;top:27%;left:50%;transform:translateX(-50%);
+  font-size:clamp(9px,1.7vw,15px);font-weight:800;text-align:center;
+  background:rgba(26,25,62,.65);padding:5px 9px;border-radius:5px;
+  width:max-content;max-width:94%;text-shadow:0 1px 3px #1a1732}
+.chase-help{position:absolute;bottom:3%;left:50%;transform:translateX(-50%);
+  width:max-content;max-width:96%;text-align:center;font-size:clamp(8px,1.4vw,13px);
+  text-shadow:0 1px 3px #17162e;background:rgba(25,22,54,.62);
+  padding:4px 7px;border-radius:4px}
+#chase-ui.chase-hit::after{content:"";position:absolute;inset:0;
+  pointer-events:none;background:rgba(251,92,112,.16)}
