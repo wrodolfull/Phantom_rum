@@ -10,7 +10,7 @@ async function pressStart(page:Page) {
 test("chase does not return to runner within seconds in Chromium",async({page})=>{
   const errors:string[]=[];
   page.on("pageerror",e=>errors.push(e.message));
-  page.on("console",m=>{if(m.type()==="error")errors.push(m.text());});
+  page.on("console",m=>{if(["error","warning"].includes(m.type()))errors.push(m.text());});
   await page.goto("/?test_chase=1&debug_chase=1");
   await expect(page.locator("#phantom-build")).toContainText("0.9.2");
   await pressStart(page);
@@ -19,7 +19,14 @@ test("chase does not return to runner within seconds in Chromium",async({page})=
   await page.waitForTimeout(6_000);
   const mode=await page.locator("html").getAttribute("data-phantom-mode");
   const seconds=await page.locator("html").getAttribute("data-phantom-chase-seconds");
-  expect(["chase-three","chase-compat"], JSON.stringify({mode,seconds,errors})).toContain(mode);
+  const diagnosis=await page.evaluate(()=>({
+    diagnostics:document.getElementById("phantom-diagnostics")?.textContent,
+    datasets:{...document.documentElement.dataset},
+    overlay:document.getElementById("chase-ui")?.textContent?.slice(0,300),
+    gameCanvasCount:document.querySelectorAll("#game canvas").length
+  }));
+  console.log("CHASE_E2E",JSON.stringify({mode,seconds,diagnosis,errors}));
+  expect(["chase-three","chase-compat"], JSON.stringify({mode,seconds,diagnosis,errors})).toContain(mode);
   expect(Number(seconds)).toBeGreaterThan(.2);
   await expect(page.locator("#phantom-build")).toBeVisible();
 });
@@ -28,8 +35,15 @@ test("forced compatibility chase lasts beyond the original one-second bug",async
   page.on("pageerror",e=>errors.push(e.message));
   await page.goto("/?test_chase=1&force_compat=1&debug_chase=1");
   await pressStart(page);
-  await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","chase-compat",
-    {timeout:15_000});
+  await page.waitForTimeout(2_000);
+  const firstState=await page.evaluate(()=>({
+    datasets:{...document.documentElement.dataset},
+    diagnostics:document.getElementById("phantom-diagnostics")?.textContent,
+    canvases:document.querySelectorAll("#game canvas").length
+  }));
+  console.log("FORCED_COMPAT_E2E",JSON.stringify({firstState,errors}));
+  await expect(page.locator("html"),JSON.stringify(firstState)).toHaveAttribute(
+    "data-phantom-mode","chase-compat",{timeout:4_000});
   await page.waitForTimeout(4_000);
   const mode=await page.locator("html").getAttribute("data-phantom-mode");
   expect(mode,JSON.stringify(errors)).toBe("chase-compat");
