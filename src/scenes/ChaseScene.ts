@@ -23,7 +23,7 @@ export class ChaseScene extends Phaser.Scene {
   private three?:ThreeApi;
   private world?:T.Scene;
   private camera?:T.PerspectiveCamera;
-  private renderer?:T.WebGLRenderer;
+  private threeRenderer?:T.WebGLRenderer;
   private ghost?:T.Group;
   private hunter?:T.Group;
   private ghostMaterial?:T.MeshStandardMaterial;
@@ -189,7 +189,7 @@ export class ChaseScene extends Phaser.Scene {
     renderer.domElement.className="chase-three-canvas";
     renderer.domElement.style.pointerEvents="none";
     document.getElementById("game")?.appendChild(renderer.domElement);
-    this.renderer=renderer;this.world=world;this.camera=camera;
+    this.threeRenderer=renderer;this.world=world;this.camera=camera;
     world.add(new THREE.AmbientLight(0xb1addb,1.6));
     const moonlight=new THREE.DirectionalLight(0xc4dcff,2);
     moonlight.position.set(-8,15,-15);world.add(moonlight);
@@ -351,13 +351,13 @@ export class ChaseScene extends Phaser.Scene {
     }
   }
   update(_time:number,deltaMs:number){
-    if(!this.ready||!this.renderer||!this.world||!this.camera||!this.ghost||!this.hunter)return;
+    if(!this.ready||!this.threeRenderer||!this.world||!this.camera||!this.ghost||!this.hunter)return;
     const k=this.keys!;
     if(Phaser.Input.Keyboard.JustDown(k.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(k.music))retroAudio.toggleMusic();
     if(Phaser.Input.Keyboard.JustDown(k.effects))retroAudio.toggleEffects();
     if(this.paused){
-      this.renderer.render(this.world,this.camera);return;
+      this.threeRenderer.render(this.world,this.camera);return;
     }
     const dt=Math.min(deltaMs/1000,LIMIT_DT);
     this.gesture.update(performance.now());
@@ -371,8 +371,8 @@ export class ChaseScene extends Phaser.Scene {
     }
     this.tick(dt);
     // A scene switch can synchronously dispose the Three renderer.
-    if(this.ready&&this.renderer&&this.world&&this.camera)
-      this.renderer.render(this.world,this.camera);
+    if(this.ready&&this.threeRenderer&&this.world&&this.camera)
+      this.threeRenderer.render(this.world,this.camera);
   }
   private tick(dt:number){
     this.timeAlive+=dt;
@@ -520,10 +520,10 @@ export class ChaseScene extends Phaser.Scene {
       this.disposeObject(this.world);
       this.world.clear();this.world=undefined;
     }
-    if(this.renderer){
-      this.renderer.domElement.remove();
-      this.renderer.dispose();this.renderer.forceContextLoss();
-      this.renderer=undefined;
+    if(this.threeRenderer){
+      this.threeRenderer.domElement.remove();
+      this.threeRenderer.dispose();this.threeRenderer.forceContextLoss();
+      this.threeRenderer=undefined;
     }
     retroAudio.stop();
   }
