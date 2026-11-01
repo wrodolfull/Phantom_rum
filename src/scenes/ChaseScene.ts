@@ -27,6 +27,7 @@ export class ChaseScene extends Phaser.Scene {
   private ghost?:T.Group;
   private hunter?:T.Group;
   private ghostMaterial?:T.MeshStandardMaterial;
+  private heroColor=0xffffff;
   private graveProps:Prop[]=[];
   private laneMarks:Prop[]=[];
   private hazards:Hazard[]=[];
@@ -220,6 +221,7 @@ export class ChaseScene extends Phaser.Scene {
     }
     const look=activeAppearance(progressStore.load());
     const palette=heroById(look.hero);
+    this.heroColor=parseInt(palette.body.substring(1),16);
     this.ghostMaterial=new THREE.MeshStandardMaterial({
       color:new THREE.Color(palette.body),roughness:.63,transparent:true,opacity:1
     });
@@ -368,7 +370,9 @@ export class ChaseScene extends Phaser.Scene {
         this.jump();
     }
     this.tick(dt);
-    this.renderer.render(this.world,this.camera);
+    // A scene switch can synchronously dispose the Three renderer.
+    if(this.ready&&this.renderer&&this.world&&this.camera)
+      this.renderer.render(this.world,this.camera);
   }
   private tick(dt:number){
     this.timeAlive+=dt;
@@ -397,8 +401,7 @@ export class ChaseScene extends Phaser.Scene {
       if(this.ghostMaterial){
         this.ghostMaterial.opacity=Phaser.Math.Linear(this.ghostMaterial.opacity,
           this.intangible?.51:1,Math.min(1,dt*12));
-        this.ghostMaterial.color.setHex(this.intangible?0x74d9f8:
-          parseInt(heroById(activeAppearance(progressStore.load()).hero).body.substring(1),16));
+        this.ghostMaterial.color.setHex(this.intangible?0x74d9f8:this.heroColor);
       }
       this.jumpVelocity-=15.5*dt;
       this.jumpHeight=Math.max(0,this.jumpHeight+this.jumpVelocity*dt);
