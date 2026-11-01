@@ -13,6 +13,7 @@ import {ShopScene} from "./scenes/ShopScene";
 import {ChaseScene} from "./scenes/ChaseScene";
 import {ChaseFallbackScene} from "./scenes/ChaseFallbackScene";
 import {CHASE_START_PX,shouldStartChase,type RunSnapshot} from "./game/modes";
+import {reportMode} from "./game/diagnostics";
 import {activeAppearance} from "./shop/economy";
 import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
@@ -39,6 +40,7 @@ type Material = "physical" | "intangible";
 class MenuScene extends Phaser.Scene {
   constructor() { super("menu"); }
   create() {
+    reportMode("menu");
     paintBackground(this, 0);
     this.add.tileSprite(0, 211, W, H - 211, "ground").setOrigin(0, 0).setDepth(-1);
     const look=activeAppearance(progressStore.load());
@@ -149,6 +151,8 @@ class GameScene extends Phaser.Scene {
   init(data?:{forceTutorial?:boolean;resume?:RunSnapshot}){
     this.resumeData=data?.resume;
     this.forceTutorial=data?.resume?.forceTutorial??(data?.forceTutorial===true);
+    reportMode("runner",data?.resume
+      ?"returned at "+Math.floor(data.resume.distancePx/10)+"m":"fresh run");
   }
   create(){
     this.things=[];this.distance=0;this.speed=160;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.planner=new CoursePlanner(Date.now());
@@ -266,6 +270,7 @@ class GameScene extends Phaser.Scene {
       chaseDone:this.chaseDone,
       nearestHazardPx:nearest
     }))return;
+    reportMode("chase-loading","trigger "+Math.floor(this.distance/10)+"m");
     this.transitioning=true;
     this.chaseDone=true;
     this.gesture.clear();
