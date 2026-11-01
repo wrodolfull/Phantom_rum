@@ -11,6 +11,7 @@ import {tutorialHint} from "./tutorial/tutorial";
 import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
 import {ShopScene} from "./scenes/ShopScene";
 import {ChaseScene} from "./scenes/ChaseScene";
+import {ChaseFallbackScene} from "./scenes/ChaseFallbackScene";
 import {CHASE_START_PX,shouldStartChase,type RunSnapshot} from "./game/modes";
 import {activeAppearance} from "./shop/economy";
 import type {HeroId,AccessoryId} from "./shop/catalog";
@@ -505,8 +506,10 @@ class GameScene extends Phaser.Scene {
 }
 
 new Phaser.Game({
-  type:Phaser.AUTO,width:W,height:H,parent:"game",backgroundColor:"#171733",
+  // Phaser's 2D uses Canvas to leave the only WebGL context available for Three.js.
+  // Prevents competing WebGL canvases on resource-constrained mobile browsers.
+  type:Phaser.CANVAS,width:W,height:H,parent:"game",backgroundColor:"#171733",
   render:{pixelArt:true,antialias:false},
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene]
+  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene,ChaseFallbackScene]
 });
