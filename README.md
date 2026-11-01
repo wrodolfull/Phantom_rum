@@ -67,3 +67,14 @@ Veja [docs/visual-design.md](docs/visual-design.md) e [src/art/pixelArt.ts](src/
 - Regras de progresso e tutorial cobertas por testes automatizados (`npm test`).
 
 Consulte [docs/onboarding-achievements.md](docs/onboarding-achievements.md).
+
+## Loja Espectral (MVP 0.6)
+- Acesso à loja pelo menu principal e pelo Game Over.
+- Cinco fantasmas originais e quatro opções de acessórios pixel art.
+- Essência disponível, compra única, equipar gratuitamente e persistência no navegador.
+- Personagens e acessórios são 100% cosméticos, sem vantagens de jogabilidade.
+- A aparência equipada é usada no menu, durante a partida e na tela de resultados.
+- Migração automática da Essência histórica do save antigo.
+- Testes de compra, saldo, inventário e compatibilidade com progresso anterior.
+
+Consulte [docs/shop-cosmetics.md](docs/shop-cosmetics.md).

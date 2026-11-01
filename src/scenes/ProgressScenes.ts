@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import {setupVisuals,addBackdrop} from "../art/pixelArt";
 import {retroAudio} from "../audio/RetroAudio";
 import {ACHIEVEMENTS,nextDistanceGoal,progressStore,type Progress,type RunStats} from "../progression/progress";
+import {balance,activeAppearance} from "../shop/economy";
+import {ensureAppearanceVisuals,appearanceTexture} from "../art/pixelArt";
 
 const W=480,H=270;
 function sceneBackground(scene:Phaser.Scene){
@@ -23,7 +25,10 @@ export class ResultsScene extends Phaser.Scene {
   create(){
     retroAudio.stop();
     sceneBackground(this);
-    this.add.image(420,178,"phantom-hurt").setScale(1.8).setAlpha(.5).setDepth(1);
+    const look=activeAppearance(this.result.progress);
+    ensureAppearanceVisuals(this,look.hero,look.accessory);
+    this.add.image(420,178,appearanceTexture(look.hero,look.accessory,false,"hurt"))
+      .setScale(1.8).setAlpha(.5).setDepth(1);
     const panel=this.add.graphics().setDepth(3);
     panel.fillStyle(0x231d42,.97).fillRoundedRect(39,12,402,245,10);
     panel.lineStyle(2,0x8c74c3).strokeRoundedRect(39,12,402,245,10);
@@ -34,7 +39,8 @@ export class ResultsScene extends Phaser.Scene {
     else txt(157,53,"MAIS UMA TENTATIVA!",11,"#bdb6e1");
     txt(62,83,"DISTÂNCIA   "+this.result.stats.meters+" m",13,"#ffffff");
     txt(62,105,"SEU RECORDE "+this.result.progress.bestDistance+" m",11,"#b9edfc");
-    txt(62,125,"ESSÊNCIAS   "+this.result.stats.essence+"   TOTAL "+this.result.progress.totalEssence,10,"#ffda82");
+    txt(62,125,"ESSÊNCIAS +"+this.result.stats.essence+
+      "   SALDO ◆ "+balance(this.result.progress),10,"#ffda82");
     const unlockedTitles=this.result.unlocked.map(id=>ACHIEVEMENTS.find(a=>a.id===id)?.title??id);
     if(unlockedTitles.length>0){
       txt(62,146,"NOVA CONQUISTA: "+unlockedTitles[0],10,"#9cf2c9");
@@ -45,13 +51,14 @@ export class ResultsScene extends Phaser.Scene {
     panel.fillStyle(0x4b4469).fillRoundedRect(62,194,356,8,3);
     panel.fillStyle(0x72cce2).fillRoundedRect(62,194,Math.max(1,Math.round(356*goal.ratio)),8,3);
     const btn=(x:number,label:string)=>this.add.text(x,227,label,{
-      fontFamily:"monospace",fontSize:"12px",color:"#ffffff",
+      fontFamily:"monospace",fontSize:"10px",color:"#ffffff",
       backgroundColor:"#6d519b",padding:{x:12,y:7}
     }).setOrigin(.5).setDepth(5).setInteractive({useHandCursor:true});
     const replay=()=>this.scene.start("game",{forceTutorial:this.result.forceTutorial});
     const menu=()=>this.scene.start("menu");
-    btn(145,"▶ RECOMEÇAR").on("pointerdown",replay);
-    btn(333,"⌂ MENU").on("pointerdown",menu);
+    btn(122,"▶ RECOMEÇAR").on("pointerdown",replay);
+    btn(260,"◆ LOJA").on("pointerdown",()=>this.scene.start("shop"));
+    btn(373,"⌂ MENU").on("pointerdown",menu);
     this.input.keyboard?.once("keydown-SPACE",replay);
     this.input.keyboard?.once("keydown-ENTER",replay);
     this.input.keyboard?.once("keydown-ESC",menu);
