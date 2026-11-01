@@ -12,10 +12,11 @@ body{display:grid;place-items:center;min-height:100svh;min-height:100dvh}
   display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
   min-width:clamp(84px,16vw,125px);min-height:clamp(54px,13vh,82px);-webkit-tap-highlight-color:transparent}
 .touch-action span{font-size:clamp(9px,1.4vw,13px);letter-spacing:.04em}
-.touch-action:active,.touch-action.pressed{background:rgba(80,170,213,.85);border-color:#ddfaff;transform:scale(.97)}
+.touch-action:active,.touch-action.pressed{background:rgba(80,170,213,.85);border-color:#ddfaff}
+.touch-action--jump:active,.touch-action--phase:active{transform:scale(.97)}
 .touch-action--jump{bottom:4%;left:3%}
 .touch-action--phase{bottom:4%;right:3%}
-.touch-action--pause{top:3%;right:2%;min-width:76px;min-height:42px;
+.touch-action--pause{bottom:4%;left:50%;transform:translateX(-50%);min-width:76px;min-height:42px;
   font-size:clamp(10px,1.6vw,14px);border-radius:8px;background:rgba(35,35,83,.87)}
 @media (pointer:coarse),(max-width:850px){
   :root[data-playing="true"] #touch-controls{display:block}
