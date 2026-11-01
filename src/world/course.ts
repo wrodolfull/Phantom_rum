@@ -151,8 +151,9 @@ export class CoursePlanner {
   private first=true;
   private previous="";
   private showcaseIndex=0;
-  constructor(seed:number=0x91cafa){
+  constructor(seed:number=0x91cafa,skipIntro=false){
     this.seed=(seed|0)||0x91cafa;
+    this.first=!skipIntro;
   }
   private rand(){
     let x=this.seed;x^=x<<13;x^=x>>>17;x^=x<<5;
