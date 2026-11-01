@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import "./style.css";
-import { setupVisuals, addBackdrop } from "./art/pixelArt";
+import {setupVisuals,addBackdrop,ensureAppearanceVisuals,appearanceTexture} from "./art/pixelArt";
 import { retroAudio } from "./audio/RetroAudio";
 import { PhantomEffects } from "./effects/PhantomEffects";
 import { CoursePlanner, FIRST_SEGMENT_START, GROUND_Y, difficulty, type ObstacleKind } from "./world/course";
@@ -8,6 +8,9 @@ import { canLand, intersectsThing } from "./world/collisions";
 import {progressStore,type RunStats} from "./progression/progress";
 import {tutorialHint} from "./tutorial/tutorial";
 import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
+import {ShopScene} from "./scenes/ShopScene";
+import {activeAppearance} from "./shop/economy";
+import type {HeroId,AccessoryId} from "./shop/catalog";
 
 const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
@@ -21,7 +24,10 @@ class MenuScene extends Phaser.Scene {
   create() {
     paintBackground(this, 0);
     this.add.tileSprite(0, 211, W, H - 211, "ground").setOrigin(0, 0).setDepth(-1);
-    const hero = this.add.image(W / 2, 145, "phantom-0").setScale(1.35).setDepth(4);
+    const look=activeAppearance(progressStore.load());
+    ensureAppearanceVisuals(this,look.hero,look.accessory);
+    const hero=this.add.image(W/2,145,appearanceTexture(look.hero,look.accessory,false,0))
+      .setScale(1.35).setDepth(4);
     this.tweens.add({targets: hero, y: 139, duration: 800, yoyo: true, repeat: -1});
     const title = this.add.text(W / 2, 69, "PHANTOM RUN", {fontFamily:"monospace",fontSize:"34px",color:"#f6f0ff",stroke:"#423575",strokeThickness:7}).setOrigin(.5);
     this.tweens.add({targets:title,y:65,duration:1100,yoyo:true,repeat:-1});
@@ -37,8 +43,9 @@ class MenuScene extends Phaser.Scene {
     button(W/2,163,"▶ JOGAR",20).on("pointerdown",()=>launch());
     this.input.keyboard?.once("keydown-SPACE",()=>launch());
     this.input.keyboard?.once("keydown-ENTER",()=>launch());
-    button(125,202,"? COMO JOGAR").on("pointerdown",()=>launch(true));
-    button(343,202,"★ CONQUISTAS").on("pointerdown",()=>this.scene.start("achievements"));
+    button(93,202,"? COMO JOGAR",9).on("pointerdown",()=>launch(true));
+    button(240,202,"◆ LOJA",11).on("pointerdown",()=>this.scene.start("shop"));
+    button(385,202,"★ CONQUISTAS",9).on("pointerdown",()=>this.scene.start("achievements"));
     const music=button(143,237,""),sound=button(330,237,"");
     const refresh=()=>{music.setText("MÚSICA: "+(retroAudio.musicEnabled?"ON":"OFF"));
       sound.setText("EFEITOS: "+(retroAudio.effectsEnabled?"ON":"OFF"));};
@@ -58,6 +65,8 @@ function paintBackground(scene: Phaser.Scene, distance: number) {
 class GameScene extends Phaser.Scene {
   private world!: Phaser.GameObjects.Graphics;
   private phantom!: Phaser.GameObjects.Image;
+  private heroId!:HeroId;
+  private accessoryId!:AccessoryId;
   private backdrop!: ReturnType<typeof addBackdrop>;
   private groundTiles!: Phaser.GameObjects.TileSprite;
   private hud!: Phaser.GameObjects.Text;
@@ -107,9 +116,13 @@ class GameScene extends Phaser.Scene {
     retroAudio.start();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>retroAudio.stop());
     this.backdrop = paintBackground(this,0);
+    const look=activeAppearance(progressStore.load());
+    this.heroId=look.hero;this.accessoryId=look.accessory;
+    ensureAppearanceVisuals(this,this.heroId,this.accessoryId);
     this.groundTiles=this.add.tileSprite(0, 211, W, H-211, "ground").setOrigin(0,0).setDepth(2);
     this.world=this.add.graphics().setDepth(3);
-    this.phantom=this.add.image(PLAYER_X, this.y+16, "phantom-0").setDepth(6);
+    this.phantom=this.add.image(PLAYER_X,this.y+16,
+      appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
     this.particles=new PhantomEffects(this);
     this.add.graphics().setDepth(18).fillStyle(0x1c1a40, .93).fillRoundedRect(5, 4, 320, 40, 5)
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
@@ -321,14 +334,15 @@ class GameScene extends Phaser.Scene {
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
-    const texture=airborne?(intangible?"phantom-phase-jump":"phantom-jump"):
-      (intangible?"phantom-phase-":"phantom-")+frame;
+    const texture=appearanceTexture(this.heroId,this.accessoryId,intangible,
+      airborne?"jump":frame);
     if(this.alive){
       this.phantom.setTexture(texture)
         .setPosition(PLAYER_X,Math.round(this.y+16))
         .setAlpha(intangible?.78+.09*Math.sin(this.elapsed*16):1)
         .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
-    }else this.phantom.setTexture("phantom-hurt").setAlpha(1).setScale(1);
+    }else this.phantom.setTexture(
+      appearanceTexture(this.heroId,this.accessoryId,false,"hurt")).setAlpha(1).setScale(1);
     this.hud.setText("PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score);
     this.tierLabel.setText("NÍVEL "+difficulty(this.distance).tier);
     if(this.tutorialEndTime>0&&this.elapsed>this.tutorialEndTime){
@@ -347,5 +361,5 @@ new Phaser.Game({
   type:Phaser.AUTO,width:W,height:H,parent:"game",backgroundColor:"#171733",
   render:{pixelArt:true,antialias:false},
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene]
+  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene]
 });
