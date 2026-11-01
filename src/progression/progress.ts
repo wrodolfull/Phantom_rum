@@ -1,4 +1,6 @@
 /** Progress stored on this device only; deterministic rules are unit-testable. */
+import {isHeroId,isAccessoryId,type HeroId,type AccessoryId,type ShopCategory} from "../shop/catalog";
+import {purchase,equip} from "../shop/economy";
 export const SAVE_KEY = "phantom-run-progress-v1";
 export const LEGACY_BEST_KEY = "phantom-run-best-v1";
 
@@ -20,6 +22,12 @@ export interface Progress {
   totalMeters:number;
   totalRuns:number;
   achievements:string[];
+  /** Historical total. Purchases never reduce this statistic. */
+  spentEssence:number;
+  ownedHeroes:HeroId[];
+  ownedAccessories:AccessoryId[];
+  equippedHero:HeroId;
+  equippedAccessory:AccessoryId;
 }
 export interface Achievement {
   id:string; title:string; description:string;
@@ -39,21 +47,35 @@ const integer=(value:unknown)=>typeof value==='number' && Number.isFinite(value)
   ?Math.max(0,Math.min(1_000_000_000,Math.floor(value))):0;
 export function emptyProgress():Progress {
   return {version:1,tutorialDone:false,bestDistance:0,bestEssence:0,
-    totalEssence:0,totalMeters:0,totalRuns:0,achievements:[]};
+    totalEssence:0,totalMeters:0,totalRuns:0,achievements:[],
+    spentEssence:0,ownedHeroes:["phantom"],ownedAccessories:["none"],
+    equippedHero:"phantom",equippedAccessory:"none"};
 }
 export function normalizeProgress(value:unknown,legacyBest:unknown=0):Progress {
   const old=typeof value==='object'&&value!==null?value as Record<string,unknown>:{};
   const known=new Set(ACHIEVEMENTS.map(a=>a.id));
+  const ownedHeroes:HeroId[]=["phantom",...(
+    Array.isArray(old.ownedHeroes)?old.ownedHeroes.filter(isHeroId):[])];
+  const ownedAccessories:AccessoryId[]=["none",...(
+    Array.isArray(old.ownedAccessories)?old.ownedAccessories.filter(isAccessoryId):[])];
+  const heroes=[...new Set(ownedHeroes)];
+  const accessories=[...new Set(ownedAccessories)];
+  const totalEssence=integer(old.totalEssence);
+  const spentEssence=Math.min(totalEssence,integer(old.spentEssence));
+  const hero=isHeroId(old.equippedHero)&&heroes.includes(old.equippedHero)?old.equippedHero:"phantom";
+  const accessory=isAccessoryId(old.equippedAccessory)&&accessories.includes(old.equippedAccessory)?old.equippedAccessory:"none";
   return {
     version:1,
     tutorialDone:old.tutorialDone===true,
     bestDistance:Math.max(integer(old.bestDistance),integer(legacyBest)),
     bestEssence:integer(old.bestEssence),
-    totalEssence:integer(old.totalEssence),
+    totalEssence,
     totalMeters:integer(old.totalMeters),
     totalRuns:integer(old.totalRuns),
     achievements:Array.isArray(old.achievements)?
-      [...new Set(old.achievements.filter((s:unknown):s is string=>typeof s==='string'&&known.has(s)))]:[]
+      [...new Set(old.achievements.filter((s:unknown):s is string=>typeof s==='string'&&known.has(s)))]:[],
+    spentEssence,ownedHeroes:heroes,ownedAccessories:accessories,
+    equippedHero:hero,equippedAccessory:accessory
   };
 }
 export function finishRun(before:Progress,stats:RunStats){
@@ -102,6 +124,16 @@ export class ProgressStore {
     const progress=this.load();
     if(!progress.tutorialDone){progress.tutorialDone=true;this.save(progress);}
     return progress;
+  }
+  buy(category:ShopCategory,id:string){
+    const result=purchase(this.load(),category,id);
+    if(result.ok)this.save(result.progress);
+    return result;
+  }
+  equip(category:ShopCategory,id:string){
+    const result=equip(this.load(),category,id);
+    if(result.ok)this.save(result.progress);
+    return result;
   }
   finish(stats:RunStats){
     const result=finishRun(this.load(),stats);
