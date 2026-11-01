@@ -78,3 +78,14 @@ Consulte [docs/onboarding-achievements.md](docs/onboarding-achievements.md).
 - Testes de compra, saldo, inventário e compatibilidade com progresso anterior.
 
 Consulte [docs/shop-cosmetics.md](docs/shop-cosmetics.md).
+
+## Beta mobile e GitHub Pages (MVP 0.7)
+- Tela 16:9 responsiva, aviso de orientação com opção de continuar em retrato.
+- Botões touch visíveis durante a partida: **PULAR**, **ATRAVESSAR** (segurar) e **PAUSAR**.
+- Multitouch com captura/cancelamento de ponteiros, pausa automática ao alternar apps ou ocultar a aba.
+- HUD com atualização de texto otimizada; `?debug=1` mostra FPS local e quadros lentos para avaliação.
+- Favicon e manifesto originais, compilação estática com caminhos relativos para hospedagem em subdiretório.
+- Workflow para publicar no **GitHub Pages**, após configurar **Settings → Pages → Source → GitHub Actions**.
+- Não há modo offline nesta versão e os testes em celulares reais ainda são necessários.
+
+Leia [docs/mobile-beta.md](docs/mobile-beta.md) antes de liberar o link publicamente.

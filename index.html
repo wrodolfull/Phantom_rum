@@ -1,3 +1,31 @@
 <!doctype html>
-<html lang="pt-BR"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/><meta name="theme-color" content="#171733"/><title>Phantom Run</title></head>
-<body><div id="game"></div><script type="module" src="/src/main.ts"></script></body></html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+  <meta name="theme-color" content="#25264f"/>
+  <meta name="description" content="Phantom Run: um endless runner em pixel art. Corra, pule e atravesse obstáculos em um cemitério misterioso."/>
+  <link rel="icon" href="./icons/phantom.svg" type="image/svg+xml"/>
+  <link rel="manifest" href="./manifest.webmanifest"/>
+  <title>Phantom Run — Beta</title>
+</head>
+<body>
+  <main id="game-shell" aria-label="Phantom Run">
+    <div id="game" aria-label="Área do jogo"></div>
+    <div id="touch-controls" aria-hidden="true">
+      <button id="touch-jump" class="touch-action touch-action--jump" type="button" aria-label="Pular">↑<span>PULAR</span></button>
+      <button id="touch-phase" class="touch-action touch-action--phase" type="button" aria-label="Segurar para atravessar">◈<span>ATRAVESSAR</span></button>
+      <button id="touch-pause" class="touch-action touch-action--pause" type="button" aria-label="Pausar partida">Ⅱ PAUSAR</button>
+    </div>
+  </main>
+  <div id="orientation-prompt" role="dialog" aria-label="Orientação recomendada">
+    <div class="orientation-card">
+      <div class="orientation-glyph" aria-hidden="true">▭</div>
+      <h1>VIRE O CELULAR</h1>
+      <p>Phantom Run foi criado para jogar na horizontal.</p>
+      <button id="play-portrait" type="button">Jogar na vertical mesmo assim</button>
+    </div>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

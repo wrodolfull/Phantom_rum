@@ -11,6 +11,19 @@ import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
 import {ShopScene} from "./scenes/ShopScene";
 import {activeAppearance} from "./shop/economy";
 import type {HeroId,AccessoryId} from "./shop/catalog";
+import {mountTouchControls,type TouchBinding} from "./input/touchControls";
+import {FrameMonitor} from "./performance/frameMonitor";
+
+// The orientation reminder is dismissible without blocking portrait fallback.
+try{
+  if(sessionStorage.getItem("phantom-run-portrait-allowed")==="yes")
+    document.documentElement.classList.add("portrait-allowed");
+}catch{/* private mode */}
+document.getElementById("play-portrait")?.addEventListener("click",()=>{
+  document.documentElement.classList.add("portrait-allowed");
+  try{sessionStorage.setItem("phantom-run-portrait-allowed","yes");}catch{/* optional */}
+});
+const showDebug=new URLSearchParams(location.search).get("debug")==="1";
 
 const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
@@ -52,7 +65,10 @@ class MenuScene extends Phaser.Scene {
     music.on("pointerdown",()=>{retroAudio.toggleMusic();refresh();});
     sound.on("pointerdown",()=>{retroAudio.toggleEffects();refresh();});
     refresh();
-    this.add.text(W/2,261,"ESPAÇO: PULAR    SHIFT: ATRAVESSAR",
+    const isTouch=window.matchMedia?.("(pointer: coarse)").matches??false;
+    this.add.text(W/2,261,isTouch
+      ?"TOQUE PULAR OU SEGURE ATRAVESSAR"
+      :"ESPAÇO: PULAR    SHIFT: ATRAVESSAR",
       {fontFamily:"monospace",fontSize:"8px",color:"#bcb6e3"}).setOrigin(.5);
   }
 }
@@ -76,6 +92,13 @@ class GameScene extends Phaser.Scene {
   private pauseButton!: Phaser.GameObjects.Text;
   private musicButton!: Phaser.GameObjects.Text;
   private effectsButton!: Phaser.GameObjects.Text;
+  private touch!: TouchBinding;
+  private htmlPhaseHeld=false;
+  private performance=new FrameMonitor();
+  private performanceText?:Phaser.GameObjects.Text;
+  private performanceUpdate=0;
+  private lastHud="";
+  private lastTier=-1;
   private elapsed=0;
   private things: Thing[]=[];
   private distance=0;
@@ -110,7 +133,8 @@ class GameScene extends Phaser.Scene {
   constructor(){super("game");}
   init(data?:{forceTutorial?:boolean}){this.forceTutorial=data?.forceTutorial===true;}
   create(){
-    this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.rightHeld=false;this.rightPointers.clear();this.planner=new CoursePlanner(Date.now());this.elapsed=0;
+    this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.rightHeld=false;this.rightPointers.clear();this.planner=new CoursePlanner(Date.now());this.elapsed=0;this.htmlPhaseHeld=false;
+    this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
     retroAudio.start();
@@ -145,6 +169,30 @@ class GameScene extends Phaser.Scene {
     this.effectsButton.on("pointerdown",()=>{retroAudio.toggleEffects();this.refreshControls();});
     this.pauseButton.on("pointerdown",()=>this.togglePause());
     this.refreshControls();
+    // Larger native buttons for coarse pointers, separate from Phaser's canvas input.
+    this.touch=mountTouchControls({
+      jump:()=>{if(this.alive&&!this.paused)this.jumpQueued=.1;},
+      phase:(pressed)=>{this.htmlPhaseHeld=pressed;},
+      pause:()=>this.togglePause()
+    });
+    this.touch.setPaused(false);
+    const pauseForBackground=()=>{
+      if(this.alive&&!this.paused)this.togglePause();
+    };
+    const onVisibility=()=>{if(document.hidden)pauseForBackground();};
+    document.addEventListener("visibilitychange",onVisibility);
+    window.addEventListener("blur",pauseForBackground);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
+      this.touch.destroy();
+      document.removeEventListener("visibilitychange",onVisibility);
+      window.removeEventListener("blur",pauseForBackground);
+    });
+    if(showDebug){
+      this.performanceText=this.add.text(W/2,H-6,"",{
+        fontFamily:"monospace",fontSize:"9px",color:"#aaffd9",
+        backgroundColor:"#1a1a35",padding:{x:4,y:2}
+      }).setOrigin(.5,1).setDepth(26);
+    }
     this.input.addPointer(2);
     this.input.on("pointerdown",(p:Phaser.Input.Pointer)=>{
       // HUD buttons are separate interactive targets and must not also jump/restart.
@@ -207,6 +255,7 @@ class GameScene extends Phaser.Scene {
     retroAudio.pause(this.paused);
     this.pauseButton.setText(this.paused?"▶":"Ⅱ");
     this.overlay.setText(this.paused?"PAUSADO\n\nESC OU ▶ PARA CONTINUAR":"").setVisible(this.paused);
+    this.touch?.setPaused(this.paused);
   }
   update(_time:number,delta:number){
     const jump=Phaser.Input.Keyboard.JustDown(this.keys.space)||Phaser.Input.Keyboard.JustDown(this.keys.up);
@@ -220,6 +269,15 @@ class GameScene extends Phaser.Scene {
     if(Phaser.Input.Keyboard.JustDown(this.keys.effects)){retroAudio.toggleEffects();this.refreshControls();}
     if(this.paused)return;
     if(jump)this.jumpQueued=.1;
+    if(showDebug){
+      this.performance.record(delta);
+      this.performanceUpdate+=Math.min(delta,100);
+      if(this.performanceText&&this.performanceUpdate>=600){
+        this.performanceUpdate=0;
+        const metrics=this.performance.snapshot();
+        this.performanceText.setText("FPS "+metrics.fps+"   QUADROS LENTOS "+metrics.slowPercent+"%");
+      }
+    }
     retroAudio.update();
     this.acc+=Math.min(delta/1000,.05);
     let steps=0;
@@ -230,7 +288,7 @@ class GameScene extends Phaser.Scene {
   private step(dt:number){
     this.elapsed+=dt;
     const previousMaterial=this.material;
-    this.holdIntangible=this.keys.shift.isDown||this.rightHeld;
+    this.holdIntangible=this.keys.shift.isDown||this.rightHeld||this.htmlPhaseHeld;
     if(!this.holdIntangible)this.needsRelease=false;
     if(this.material==="intangible"){
       this.ep=Math.max(0,this.ep-DRAIN*dt);
@@ -343,8 +401,13 @@ class GameScene extends Phaser.Scene {
         .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
     }else this.phantom.setTexture(
       appearanceTexture(this.heroId,this.accessoryId,false,"hurt")).setAlpha(1).setScale(1);
-    this.hud.setText("PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score);
-    this.tierLabel.setText("NÍVEL "+difficulty(this.distance).tier);
+    const hudText="PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score;
+    if(hudText!==this.lastHud){this.hud.setText(hudText);this.lastHud=hudText;}
+    const currentTier=difficulty(this.distance).tier;
+    if(currentTier!==this.lastTier){
+      this.tierLabel.setText("NÍVEL "+currentTier);
+      this.lastTier=currentTier;
+    }
     if(this.tutorialEndTime>0&&this.elapsed>this.tutorialEndTime){
       this.tutorialBanner.setVisible(false);this.tutorialEndTime=0;
     }
