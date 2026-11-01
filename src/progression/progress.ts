@@ -107,18 +107,24 @@ export function nextDistanceGoal(bestMeters:number){
     ratio:Math.max(0,Math.min(1,(bestMeters-previous)/(next-previous)))};
 }
 export class ProgressStore {
+  private fallback:Progress|null=null;
   load():Progress {
     let saved:unknown=null,legacy:unknown=0;
     try {
       const raw=localStorage.getItem(SAVE_KEY);
       if(raw!==null)saved=JSON.parse(raw);
+      else if(this.fallback!==null)return this.fallback;
       const old=localStorage.getItem(LEGACY_BEST_KEY);
       if(old!==null)legacy=Number(old);
-    }catch{/* browser storage may be disabled or corrupt */}
+    }catch{
+      // Storage may be disabled. Keep cosmetics usable until the tab reloads.
+      return this.fallback??emptyProgress();
+    }
     return normalizeProgress(saved,legacy);
   }
   save(value:Progress):void {
-    try{localStorage.setItem(SAVE_KEY,JSON.stringify(value));}catch{/* optional */}
+    this.fallback=value;
+    try{localStorage.setItem(SAVE_KEY,JSON.stringify(value));}catch{/* session-only */}
   }
   markTutorial():Progress {
     const progress=this.load();
