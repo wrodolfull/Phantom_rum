@@ -1,0 +1,20 @@
+{
+  "name": "Phantom Run — Beta",
+  "short_name": "Phantom Run",
+  "description": "Corra, pule e atravesse obstáculos no mundo dos fantasmas.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "theme_color": "#25264f",
+  "background_color": "#101126",
+  "icons": [
+    {
+      "src": "icons/phantom.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
