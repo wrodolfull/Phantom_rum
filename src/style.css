@@ -54,3 +54,12 @@ button:focus-visible{outline:3px solid #91e6ff;outline-offset:3px}
   padding:4px 7px;border-radius:4px}
 #chase-ui.chase-hit::after{content:"";position:absolute;inset:0;
   pointer-events:none;background:rgba(251,92,112,.16)}
+
+/* Version stamp lets testers distinguish a new Pages deployment from cached JS. */
+#phantom-build{position:absolute;right:3px;bottom:2px;z-index:45;pointer-events:none;
+  font:700 clamp(6px,.8vw,9px) monospace;color:#d8e3fa;opacity:.85;
+  text-shadow:1px 1px 2px #11112d;background:rgba(19,18,46,.55);padding:2px}
+#phantom-diagnostics{position:absolute;left:3%;right:3%;top:18%;z-index:60;pointer-events:none;
+  padding:7px;background:rgba(20,14,40,.9);border:1px solid #b87fd7;
+  font:700 clamp(9px,1.2vw,13px) monospace;color:#fce2ff;white-space:normal;
+  overflow-wrap:anywhere}

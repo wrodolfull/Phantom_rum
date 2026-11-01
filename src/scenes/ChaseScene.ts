@@ -5,6 +5,8 @@ import {progressStore} from "../progression/progress";
 import {activeAppearance} from "../shop/economy";
 import {heroById} from "../shop/catalog";
 import {ChaseInput} from "../input/ChaseInput";
+import {reportMode,reportChaseError,reportChaseSeconds} from "../game/diagnostics";
+import {ChaseClock} from "../game/ChaseClock";
 import {
   CHASE_END_PX,CHASE_WORLD_SPEED,chaseCompleted,mergeRun,asRunStats,chaseCollision,waveAt,
   type ChaseObject,type ChaseObstacleKind,type RunSnapshot
@@ -13,7 +15,6 @@ import {
 const WIDTH=480,HEIGHT=270;
 const PLAYER_Z=2.25;
 const LANE_X=[-2.4,0,2.4] as const;
-const LIMIT_DT=.045;
 type Prop={mesh:T.Object3D;z:number};
 type Hazard={obstacle:ChaseObject;model:T.Group};
 type ThreeApi=typeof import("three");
@@ -41,8 +42,13 @@ export class ChaseScene extends Phaser.Scene {
   private lane:0|1|2=1;
   private jumpHeight=0;
   private jumpVelocity=0;
+  private clock=new ChaseClock();
   private timeAlive=0;
   private activeSeconds=0;
+  private initialDistance=0;
+  private readyAtWall=0;
+  private validFinish=false;
+  private blockedPrematureReturn=false;
   private fallbackStarted=false;
   private spawnClock=0;
   private spawnIndex=0;
@@ -71,22 +77,36 @@ export class ChaseScene extends Phaser.Scene {
     this.lane=1;this.jumpHeight=0;this.jumpVelocity=0;this.timeAlive=0;
     this.spawnClock=0;this.spawnIndex=0;this.hunterPressure=.16;
     this.activeSeconds=0;this.fallbackStarted=false;
+    this.initialDistance=this.run.distancePx;
+    this.readyAtWall=0;this.validFinish=false;
+    this.blockedPrematureReturn=false;
     this.intangible=false;this.heldPhase=false;this.phaseLocked=false;
     this.paused=false;this.returning=false;this.returningTime=0;
     this.ready=false;this.ended=false;this.hudClock=0;this.hitFlash=0;
     this.graveProps=[];this.laneMarks=[];this.hazards=[];
+    this.clock.reset(performance.now());
+    reportMode("chase-loading","Three.js import pending");
     retroAudio.start();
     this.createHud();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>this.cleanup());
     this.installControls();
 
     try{
+      if(new URLSearchParams(location.search).has("force_compat")){
+        // Defer the handoff until Phaser completes its create() lifecycle.
+        await Promise.resolve();
+        this.useCompatibilityMode(new Error("QA requested compatible renderer"));
+        return;
+      }
       // On-demand module: Phaser-only sessions do not load Three.js.
       const THREE=await import("three");
       if(!this.sys.isActive())return;
       this.three=THREE;
       this.createWorld(THREE);
       this.ready=true;
+      this.readyAtWall=Date.now();
+      this.clock.reset(Date.now());
+      reportMode("chase-three","WebGL initialized");
     }catch(error){
       this.useCompatibilityMode(error);
     }
@@ -95,6 +115,8 @@ export class ChaseScene extends Phaser.Scene {
   private useCompatibilityMode(error:unknown){
     if(this.fallbackStarted||!this.sys.isActive())return;
     this.fallbackStarted=true;
+    reportChaseError("Three.js start/render",error);
+    reportMode("chase-loading","switch to compatible perspective");
     console.warn("[Phantom Run] 3D renderer unavailable; using playable 2.5D chase",error);
     this.ready=false;
     this.gesture?.clear();
@@ -179,6 +201,7 @@ export class ChaseScene extends Phaser.Scene {
   private togglePause(){
     if(this.returning||this.ended)return;
     this.paused=!this.paused;
+    this.clock.resume(Date.now());
     retroAudio.pause(this.paused);
     this.gesture.clear();this.heldPhase=false;
     if(this.pauseButton){
@@ -369,16 +392,16 @@ export class ChaseScene extends Phaser.Scene {
       this.world.add(model);this.hazards.push({obstacle:data,model});
     }
   }
-  update(_time:number,deltaMs:number){
+  update(_time:number,_deltaMs:number){
     if(!this.ready||!this.threeRenderer||!this.world||!this.camera||!this.ghost||!this.hunter)return;
     const k=this.keys!;
     if(Phaser.Input.Keyboard.JustDown(k.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(k.music))retroAudio.toggleMusic();
     if(Phaser.Input.Keyboard.JustDown(k.effects))retroAudio.toggleEffects();
+    const dt=this.clock.tick(Date.now(),this.paused);
     if(this.paused){
       this.threeRenderer.render(this.world,this.camera);return;
     }
-    const dt=Math.min(deltaMs/1000,LIMIT_DT);
     this.gesture.update(performance.now());
     if(!this.returning){
       if(Phaser.Input.Keyboard.JustDown(k.left)||Phaser.Input.Keyboard.JustDown(k.a))
@@ -436,8 +459,12 @@ export class ChaseScene extends Phaser.Scene {
       this.hunter!.position.z=7-this.hunterPressure*3.8;
       this.hunter!.rotation.z=Math.sin(this.timeAlive*11)*.035;
       this.hunterPressure=Math.max(.11,this.hunterPressure-.017*dt);
-      this.activeSeconds+=dt;
-      this.run.distancePx+=CHASE_WORLD_SPEED*dt;
+      // Never allow Phaser's update frequency or WebGL clock to accelerate
+      // real-world pursuit time. Distance derives from played seconds.
+      const wallSeconds=Math.max(0,(Date.now()-this.readyAtWall)/1000);
+      this.activeSeconds=Math.min(this.activeSeconds+dt,wallSeconds);
+      reportChaseSeconds(this.activeSeconds);
+      this.run.distancePx=this.initialDistance+CHASE_WORLD_SPEED*this.activeSeconds;
       this.spawnClock+=dt;
       if(this.spawnClock>=1.55){
         this.spawnClock-=1.55;this.spawnWave();
@@ -471,9 +498,24 @@ export class ChaseScene extends Phaser.Scene {
       if(this.hunterPressure>=1){this.captured();return;}
       if(chaseCompleted(this.run.distancePx,this.activeSeconds))this.beginReturn();
     }else{
+      // Safety latch: a scene is never allowed to leave without a verified
+      // completed chase, even if a stale callback flips returning.
+      if(!this.validFinish){
+        this.returning=false;this.returningTime=0;
+        if(!this.blockedPrematureReturn){
+          this.blockedPrematureReturn=true;
+          reportChaseError("blocked unexpected 3D return",
+            "active="+this.activeSeconds.toFixed(2)+
+            "m="+Math.floor(this.run.distancePx/10));
+        }
+        return;
+      }
       this.returningTime+=dt;
       if(this.returningTime>.72){
         this.ended=true;
+        reportMode("chase-three","exit after "+
+          this.activeSeconds.toFixed(1)+"s at "+
+          Math.floor(this.run.distancePx/10)+"m");
         this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX})});
         return;
       }
@@ -507,6 +549,19 @@ export class ChaseScene extends Phaser.Scene {
   }
   private beginReturn(){
     if(this.returning||this.ended)return;
+    const wallSeconds=(Date.now()-this.readyAtWall)/1000;
+    if(!chaseCompleted(this.run.distancePx,this.activeSeconds) ||
+       wallSeconds<18){
+      reportChaseError("premature completion rejected",
+        "active="+this.activeSeconds.toFixed(2)+
+        " wall="+wallSeconds.toFixed(2)+
+        " distance="+this.run.distancePx.toFixed(0));
+      return;
+    }
+    this.validFinish=true;
+    reportMode("chase-three","normal completion "+
+      this.activeSeconds.toFixed(1)+"s at "+
+      Math.floor(this.run.distancePx/10)+"m");
     this.returning=true;this.gesture.clear();this.heldPhase=false;
     this.run.distancePx=Math.max(this.run.distancePx,CHASE_END_PX);
     retroAudio.play("phaseOff");
