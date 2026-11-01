@@ -10,6 +10,8 @@ import {progressStore,type RunStats} from "./progression/progress";
 import {tutorialHint} from "./tutorial/tutorial";
 import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
 import {ShopScene} from "./scenes/ShopScene";
+import {ChaseScene} from "./scenes/ChaseScene";
+import {CHASE_START_PX,shouldStartChase,type RunSnapshot} from "./game/modes";
 import {activeAppearance} from "./shop/economy";
 import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
@@ -53,7 +55,15 @@ class MenuScene extends Phaser.Scene {
       this.add.text(x,y,label,{fontFamily:"monospace",fontSize:fontSize+"px",
         backgroundColor:"#514477",color:"#ffffff",padding:{x:9,y:6}})
         .setOrigin(.5).setDepth(12).setInteractive({useHandCursor:true});
-    const launch=(forceTutorial=false)=>{retroAudio.start();this.scene.start("game",{forceTutorial});};
+    const launch=(forceTutorial=false)=>{
+      retroAudio.start();
+      if(new URLSearchParams(location.search).has("test_chase")){
+        // Local QA shortcut; real runs always trigger at 800m.
+        this.scene.start("chase",{distancePx:CHASE_START_PX,energy:100,
+          essence:0,jumps:0,phases:0,walls:0,orbs:0,
+          forceTutorial:false,chaseDone:true} satisfies RunSnapshot);
+      }else this.scene.start("game",{forceTutorial});
+    };
     button(W/2,163,"▶ JOGAR",20).on("pointerdown",()=>launch());
     this.input.keyboard?.once("keydown-SPACE",()=>launch());
     this.input.keyboard?.once("keydown-ENTER",()=>launch());
@@ -118,6 +128,9 @@ class GameScene extends Phaser.Scene {
   private holdIntangible=false;
   private needsRelease=false;
   private score=0;
+  private resumeData?:RunSnapshot;
+  private chaseDone=false;
+  private transitioning=false;
   private spawnAt=FIRST_SEGMENT_START;
   private planner!: CoursePlanner;
   private tierLabel!: Phaser.GameObjects.Text;
@@ -132,13 +145,29 @@ class GameScene extends Phaser.Scene {
   private acc=0;
   private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key};
   constructor(){super("game");}
-  init(data?:{forceTutorial?:boolean}){this.forceTutorial=data?.forceTutorial===true;}
+  init(data?:{forceTutorial?:boolean;resume?:RunSnapshot}){
+    this.resumeData=data?.resume;
+    this.forceTutorial=data?.resume?.forceTutorial??(data?.forceTutorial===true);
+  }
   create(){
     this.things=[];this.distance=0;this.speed=160;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.planner=new CoursePlanner(Date.now());
     this.elapsed=0;this.gesturePhaseHeld=false;this.lastRegion=-1;
+    this.chaseDone=false;this.transitioning=false;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
+    if(this.resumeData){
+      const run=this.resumeData;
+      this.distance=run.distancePx;
+      this.ep=run.energy;this.score=run.essence;
+      this.jumps=run.jumps;this.phases=run.phases;
+      this.walls=run.walls;this.orbs=run.orbs;
+      this.chaseDone=run.chaseDone;
+      // A safe gap before the first obstacle on returning from the chase.
+      this.spawnAt=this.distance+360;
+      this.planner=new CoursePlanner(Date.now(),true);
+      this.tutorialEnabled=false;
+    }
     retroAudio.start();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>retroAudio.stop());
     this.backdrop = paintBackground(this,0);
@@ -208,7 +237,7 @@ class GameScene extends Phaser.Scene {
       this.gesture.cancel(p.id);
     });
     // Preload only the segment(s) actually needed ahead of the player.
-    while(this.spawnAt<W+240)this.generate();
+    while(this.spawnAt<this.distance+W+240)this.generate();
   }
   private updateTutorial(px:number){
     if(!this.tutorialEnabled)return;
@@ -219,6 +248,36 @@ class GameScene extends Phaser.Scene {
       this.tutorialBanner.setText(hint.text).setVisible(true);
       progressStore.markTutorial();
     }else this.tutorialBanner.setText(hint.text).setVisible(true);
+  }
+  private checkChaseTransition(){
+    if(this.transitioning||this.chaseDone||this.distance<CHASE_START_PX)return;
+    const center=this.distance+PLAYER_X;
+    let nearest=Infinity;
+    for(const t of this.things){
+      if(t.kind==="essence"||t.kind==="orb")continue;
+      const distance=t.x-center;
+      if(t.x+t.width>=center-45)nearest=Math.min(nearest,distance);
+    }
+    if(!shouldStartChase({
+      distancePx:this.distance,
+      grounded:this.motion==="grounded",
+      physical:this.material==="physical",
+      chaseDone:this.chaseDone,
+      nearestHazardPx:nearest
+    }))return;
+    this.transitioning=true;
+    this.chaseDone=true;
+    this.gesture.clear();
+    const run:RunSnapshot={
+      distancePx:this.distance,energy:this.ep,essence:this.score,
+      jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
+      forceTutorial:this.forceTutorial,chaseDone:true
+    };
+    this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
+      this.scene.start("chase",run);
+    });
+    this.cameras.main.fadeOut(550,30,26,65);
   }
   private generate(){
     const segment=this.planner.next({
@@ -266,7 +325,7 @@ class GameScene extends Phaser.Scene {
     if(Phaser.Input.Keyboard.JustDown(this.keys.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(this.keys.music)){retroAudio.toggleMusic();this.refreshControls();}
     if(Phaser.Input.Keyboard.JustDown(this.keys.effects)){retroAudio.toggleEffects();this.refreshControls();}
-    if(this.paused)return;
+    if(this.paused||this.transitioning)return;
     this.gesture.update(performance.now());
     if(jump)this.jumpQueued=.1;
     if(showDebug){
@@ -356,6 +415,7 @@ class GameScene extends Phaser.Scene {
     });
     while(this.spawnAt<this.distance+W+240)this.generate();
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
+    this.checkChaseTransition();
   }
   private die(){
     if(!this.alive)return;
@@ -448,5 +508,5 @@ new Phaser.Game({
   type:Phaser.AUTO,width:W,height:H,parent:"game",backgroundColor:"#171733",
   render:{pixelArt:true,antialias:false},
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene]
+  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene]
 });
