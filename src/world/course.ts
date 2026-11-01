@@ -150,6 +150,7 @@ export class CoursePlanner {
   private seed:number;
   private first=true;
   private previous="";
+  private showcaseIndex=0;
   constructor(seed:number=0x91cafa){
     this.seed=(seed|0)||0x91cafa;
   }
@@ -164,6 +165,17 @@ export class CoursePlanner {
       if(accepted([...options.upcoming,...segment.objects],options.playerX,options.energy)){
         this.previous=segment.id;return segment;
       }
+    }
+    const showcase=["morcego-rasante","alma-perdida","espinhos-no-caminho","cacador-do-cemiterio"];
+    if(this.showcaseIndex<showcase.length){
+      const id=showcase[this.showcaseIndex];
+      const pattern=PATTERNS.find(p=>p.id===id)!;
+      const segment=materialize(pattern,options.start);
+      if(accepted([...options.upcoming,...segment.objects],options.playerX,options.energy)){
+        this.showcaseIndex++;this.previous=segment.id;return segment;
+      }
+      // A recovery segment is safer than forcing an enemy with depleted energy.
+      return materialize(REST,options.start);
     }
     const tier=difficulty(options.distance).tier;
     const candidates=PATTERNS.filter(p=>p.tier<=tier)
