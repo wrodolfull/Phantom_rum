@@ -16,8 +16,8 @@ Abra a URL impressa pelo Vite. Para build de produção, execute `npm run build`
 
 | Ação | Desktop | Mobile |
 | --- | --- | --- |
-| Pular | Espaço ou ↑ | Toque na metade esquerda |
-| Intangibilidade | Segurar Shift | Segurar a metade direita |
+| Pular | Espaço, ↑ ou clique curto | Toque curto no cenário |
+| Intangibilidade | Segurar Shift ou mouse | Segurar o dedo sobre o cenário |
 | Pausar | Esc | Botão II no topo |
 | Reiniciar após morte | Espaço | Toque na tela |
 | Música | M ou botão ♫ | Botão ♫ |
@@ -81,11 +81,21 @@ Consulte [docs/shop-cosmetics.md](docs/shop-cosmetics.md).
 
 ## Beta mobile e GitHub Pages (MVP 0.7)
 - Tela 16:9 responsiva, aviso de orientação com opção de continuar em retrato.
-- Botões touch visíveis durante a partida: **PULAR**, **ATRAVESSAR** (segurar) e **PAUSAR**.
-- Multitouch com captura/cancelamento de ponteiros, pausa automática ao alternar apps ou ocultar a aba.
+- Botões grandes de pular/atravessar foram removidos na versão 0.8; apenas controles discretos de pausa e áudio permanecem.
+- Multitouch por gestos e tratamento de cancelamento/pausa ao alternar apps ou ocultar a aba.
 - HUD com atualização de texto otimizada; `?debug=1` mostra FPS local e quadros lentos para avaliação.
 - Favicon e manifesto originais, compilação estática com caminhos relativos para hospedagem em subdiretório.
 - Workflow para publicar no **GitHub Pages**, após configurar **Settings → Pages → Source → GitHub Actions**.
 - Não há modo offline nesta versão e os testes em celulares reais ainda são necessários.
 
 Leia [docs/mobile-beta.md](docs/mobile-beta.md) antes de liberar o link publicamente.
+
+## Gestos, inimigos e velocidade (MVP 0.8)
+- Ações sem botões na tela: **toque/clique curto pula; segurar deixa intangível; soltar retorna à forma física**.
+- Multitouch para segurar com um dedo e saltar com outro; cancelamentos não geram saltos acidentais.
+- Novos inimigos: morcego rasante, caçador de fantasmas e alma perdida; novo obstáculo: espinhos.
+- Primeiras aparições após o tutorial, com combinações geradas e validadas em níveis posteriores.
+- Aceleração mais rápida e camadas de cemitério próximas que se deslocam com parallax, além de efeitos discretos de movimento.
+- Testes para gestos, novas colisões e solvabilidade da geração.
+
+Detalhes e roteiro de testes em [docs/gesture-enemies-speed.md](docs/gesture-enemies-speed.md).

@@ -18,15 +18,21 @@ export function canLand(beforeY:number,afterY:number,velocityY:number,centerX:nu
  * 20px wide by 21px tall, 3px inset from the sprite's top.
  * Always call this on fixed-size simulation steps, not variable frame dt.
  */
-export function intersectsThing(thing:CourseObject,sweep:BodySweep):boolean {
+export function intersectsThing(thing:CourseObject,sweep:BodySweep,verticalOffset=0):boolean {
   if(thing.kind==='gap')return false;
   const left=Math.min(sweep.beforeX,sweep.afterX)-HALF_WIDTH;
   const right=Math.max(sweep.beforeX,sweep.afterX)+HALF_WIDTH;
   if(right<=thing.x||left>=thing.x+thing.width)return false;
   const top=Math.min(sweep.beforeY,sweep.afterY)+3;
   const bottom=Math.max(sweep.beforeY,sweep.afterY)+24;
-  const tBottom=thing.kind==='wall'||thing.kind==='ward'?GROUND_Y:GROUND_Y-14;
-  const tTop=thing.kind==='wall'?GROUND_Y-WALL_HEIGHT:
-    thing.kind==='ward'?GROUND_Y-WARD_HEIGHT:GROUND_Y-30;
-  return bottom>tTop && top<tBottom;
+  // New enemies have visibly different silhouettes and collision heights.
+  const h:Record<Exclude<CourseObject["kind"],"gap">,[number,number]>={
+    wall:[WALL_HEIGHT,0],ward:[WARD_HEIGHT,0],
+    bat:[38,14],hunter:[58,0],wraith:[48,0],
+    spikes:[17,0],orb:[30,14],essence:[30,14]
+  };
+  const [height,bottomInset]=h[thing.kind];
+  const thingTop=GROUND_Y-height+verticalOffset;
+  const thingBottom=GROUND_Y-bottomInset+verticalOffset;
+  return bottom>thingTop&&top<thingBottom;
 }
