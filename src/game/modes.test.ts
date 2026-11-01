@@ -1,5 +1,5 @@
 import {describe,it,expect} from "vitest";
-import {CHASE_START_PX,CHASE_END_PX,shouldStartChase,chaseCompleted,mergeRun,asRunStats,
+import {CHASE_START_PX,CHASE_END_PX,CHASE_MIN_PLAY_SECONDS,CHASE_WORLD_SPEED,shouldStartChase,chaseCompleted,mergeRun,asRunStats,
   chaseCollision,waveAt,type RunSnapshot} from "./modes";
 const base:RunSnapshot={distancePx:8000,energy:84,essence:7,jumps:10,phases:3,walls:2,
   orbs:1,forceTutorial:false,chaseDone:false};
