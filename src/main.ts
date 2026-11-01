@@ -5,14 +5,16 @@ import { retroAudio } from "./audio/RetroAudio";
 import { PhantomEffects } from "./effects/PhantomEffects";
 import { CoursePlanner, FIRST_SEGMENT_START, GROUND_Y, difficulty, type ObstacleKind } from "./world/course";
 import { canLand, intersectsThing } from "./world/collisions";
+import {progressStore,type RunStats} from "./progression/progress";
+import {tutorialHint} from "./tutorial/tutorial";
+import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
 
 const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
 const GRAVITY = 900, JUMP = -330;
-type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; sprite?: Phaser.GameObjects.Image };
+type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; counted?: boolean; sprite?: Phaser.GameObjects.Image };
 type Motion = "grounded" | "jumping" | "falling";
 type Material = "physical" | "intangible";
-const bestKey = "phantom-run-best-v1";
 
 class MenuScene extends Phaser.Scene {
   constructor() { super("menu"); }
@@ -24,20 +26,27 @@ class MenuScene extends Phaser.Scene {
     const title = this.add.text(W / 2, 69, "PHANTOM RUN", {fontFamily:"monospace",fontSize:"34px",color:"#f6f0ff",stroke:"#423575",strokeThickness:7}).setOrigin(.5);
     this.tweens.add({targets:title,y:65,duration:1100,yoyo:true,repeat:-1});
     this.add.text(W/2,117,"ATRAVESSE O IMPOSSÍVEL", {fontFamily:"monospace",fontSize:"11px",color:"#8deaff"}).setOrigin(.5);
-    const start = this.add.text(W/2,171,"▶ JOGAR", {fontFamily:"monospace",fontSize:"22px",backgroundColor:"#8053bb",padding:{x:18,y:8},color:"#ffffff"}).setOrigin(.5).setInteractive({useHandCursor:true});
-    const launch=()=>{retroAudio.start();this.scene.start("game");};
-    start.on("pointerdown",launch);
-    this.input.keyboard?.once("keydown-SPACE",launch);
-    this.input.keyboard?.once("keydown-ENTER",launch);
-    const buttonStyle={fontFamily:"monospace",fontSize:"10px",color:"#f6f0ff",backgroundColor:"#494078",padding:{x:7,y:4}};
-    const music=this.add.text(155,206,"",buttonStyle).setOrigin(.5).setInteractive({useHandCursor:true});
-    const sound=this.add.text(326,206,"",buttonStyle).setOrigin(.5).setInteractive({useHandCursor:true});
-    const refresh=()=>{music.setText("MÚSICA: "+(retroAudio.musicEnabled?"ON":"OFF"));sound.setText("EFEITOS: "+(retroAudio.effectsEnabled?"ON":"OFF"));};
+    const best=progressStore.load().bestDistance;
+    this.add.text(W/2,98,best>0?"RECORDE: "+best+" m":"SUA AVENTURA COMEÇA AQUI",
+      {fontFamily:"monospace",fontSize:"9px",color:"#ffdf9b"}).setOrigin(.5);
+    const button=(x:number,y:number,label:string,fontSize=11)=>
+      this.add.text(x,y,label,{fontFamily:"monospace",fontSize:fontSize+"px",
+        backgroundColor:"#514477",color:"#ffffff",padding:{x:9,y:6}})
+        .setOrigin(.5).setDepth(12).setInteractive({useHandCursor:true});
+    const launch=(forceTutorial=false)=>{retroAudio.start();this.scene.start("game",{forceTutorial});};
+    button(W/2,163,"▶ JOGAR",20).on("pointerdown",()=>launch());
+    this.input.keyboard?.once("keydown-SPACE",()=>launch());
+    this.input.keyboard?.once("keydown-ENTER",()=>launch());
+    button(125,202,"? COMO JOGAR").on("pointerdown",()=>launch(true));
+    button(343,202,"★ CONQUISTAS").on("pointerdown",()=>this.scene.start("achievements"));
+    const music=button(143,237,""),sound=button(330,237,"");
+    const refresh=()=>{music.setText("MÚSICA: "+(retroAudio.musicEnabled?"ON":"OFF"));
+      sound.setText("EFEITOS: "+(retroAudio.effectsEnabled?"ON":"OFF"));};
     music.on("pointerdown",()=>{retroAudio.toggleMusic();refresh();});
     sound.on("pointerdown",()=>{retroAudio.toggleEffects();refresh();});
     refresh();
-    this.add.text(W/2,232,"ESPAÇO: PULAR  |  SHIFT: INTANGÍVEL", {fontFamily:"monospace",fontSize:"10px",color:"#c9c6ed"}).setOrigin(.5);
-    this.add.text(W/2,251,"CELULAR: ESQUERDA PULA · DIREITA ATRAVESSA",{fontFamily:"monospace",fontSize:"8px",color:"#a9a8cd"}).setOrigin(.5);
+    this.add.text(W/2,261,"ESPAÇO: PULAR    SHIFT: ATRAVESSAR",
+      {fontFamily:"monospace",fontSize:"8px",color:"#bcb6e3"}).setOrigin(.5);
   }
 }
 
@@ -78,12 +87,23 @@ class GameScene extends Phaser.Scene {
   private planner!: CoursePlanner;
   private rightPointers=new Set<number>();
   private tierLabel!: Phaser.GameObjects.Text;
+  private tutorialBanner!: Phaser.GameObjects.Text;
+  private tutorialEnabled=false;
+  private forceTutorial=false;
+  private tutorialEndTime=0;
+  private jumps=0;
+  private phases=0;
+  private walls=0;
+  private orbs=0;
   private acc=0;
   private rightHeld=false;
   private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key};
   constructor(){super("game");}
+  init(data?:{forceTutorial?:boolean}){this.forceTutorial=data?.forceTutorial===true;}
   create(){
     this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.rightHeld=false;this.rightPointers.clear();this.planner=new CoursePlanner(Date.now());this.elapsed=0;
+    this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
+    this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
     retroAudio.start();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>retroAudio.stop());
     this.backdrop = paintBackground(this,0);
@@ -96,6 +116,8 @@ class GameScene extends Phaser.Scene {
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
+    this.tutorialBanner=this.add.text(W/2,61,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
+    this.updateTutorial(PLAYER_X);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
     this.keys=this.input.keyboard!.addKeys({
       space:Phaser.Input.Keyboard.KeyCodes.SPACE,up:Phaser.Input.Keyboard.KeyCodes.UP,
@@ -127,6 +149,16 @@ class GameScene extends Phaser.Scene {
     this.input.on("pointerupoutside",release);
     // Preload only the segment(s) actually needed ahead of the player.
     while(this.spawnAt<W+240)this.generate();
+  }
+  private updateTutorial(px:number){
+    if(!this.tutorialEnabled)return;
+    const hint=tutorialHint(px,true);
+    if(hint.completed){
+      this.tutorialEnabled=false;
+      this.tutorialEndTime=this.elapsed+2.5;
+      this.tutorialBanner.setText(hint.text).setVisible(true);
+      progressStore.markTutorial();
+    }else this.tutorialBanner.setText(hint.text).setVisible(true);
   }
   private generate(){
     const segment=this.planner.next({
@@ -166,7 +198,7 @@ class GameScene extends Phaser.Scene {
   update(_time:number,delta:number){
     const jump=Phaser.Input.Keyboard.JustDown(this.keys.space)||Phaser.Input.Keyboard.JustDown(this.keys.up);
     if(!this.alive){
-      if(jump)this.scene.restart();
+      if(jump)this.scene.restart({forceTutorial:this.forceTutorial});
       else this.particles.update(Math.min(delta/1000,.05),PLAYER_X,this.y+16,false);
       return;
     }
@@ -196,6 +228,7 @@ class GameScene extends Phaser.Scene {
     }
     if(previousMaterial!==this.material){
       const effect=this.material==="intangible"?"phaseOn":"phaseOff";
+      if(this.material==="intangible")this.phases++;
       this.particles.burst(effect,PLAYER_X,this.y+15);
       retroAudio.play(effect);
       this.cameras.main.flash(85,this.material==="intangible"?100:240,205,255);
@@ -203,6 +236,7 @@ class GameScene extends Phaser.Scene {
     this.jumpQueued=Math.max(0,this.jumpQueued-dt);
     if(this.motion==="grounded")this.coyote=.1;else this.coyote=Math.max(0,this.coyote-dt);
     if(this.jumpQueued>0&&this.coyote>0){
+      this.jumps++;
       this.particles.burst("jump",PLAYER_X,this.y+25,7);
       retroAudio.play("jump");
       this.vy=JUMP;this.motion="jumping";this.coyote=0;this.jumpQueued=0;
@@ -228,7 +262,7 @@ class GameScene extends Phaser.Scene {
       const touching=intersectsThing(t,swept);
       if((t.kind==="essence"||t.kind==="orb")&&touching){
         if(t.kind==="orb"){
-          this.ep=Math.min(100,this.ep+25);t.collected=true;
+          this.ep=Math.min(100,this.ep+25);t.collected=true;this.orbs++;
           this.particles.burst("orb",PLAYER_X+8,this.y+10,13);retroAudio.play("orb");
         } else if(this.material==="physical"){
           this.score++;t.collected=true;
@@ -237,6 +271,10 @@ class GameScene extends Phaser.Scene {
       }else if(touching&&t.kind==="wall"&&this.material==="physical"){this.die();return;}
       else if(touching&&t.kind==="ward"&&this.material==="intangible"){this.die();return;}
     }
+    for(const t of this.things){
+      if(t.kind==="wall"&&!t.counted&&px-10>t.x+t.width){t.counted=true;this.walls++;}
+    }
+    this.updateTutorial(px);
     this.things=this.things.filter(t=>{
       if(t.x+t.width<=this.distance-60){t.sprite?.destroy();return false;}
       return true;
@@ -245,18 +283,22 @@ class GameScene extends Phaser.Scene {
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
   }
   private die(){
-    this.alive=false;this.material="physical";
+    if(!this.alive)return;
+    this.alive=false;
+    this.material="physical";
     this.particles.burst("hit",PLAYER_X,this.y+15,24);
-    this.phantom.setTexture("phantom-hurt").setAlpha(1).setScale(1);
-    this.cameras.main.shake(140,.006);
     retroAudio.stop();
     retroAudio.play("hit");
-    const meters=Math.floor(this.distance/10);
-    let best=0;
-    try{best=Number(localStorage.getItem(bestKey)||"0");if(meters>best)localStorage.setItem(bestKey,String(meters));}catch{}
-    if(meters>best&&best>0)retroAudio.play("record");
-    this.overlay.setText("GAME OVER\n\nDISTÂNCIA: "+meters+" m\nRECORDE: "+Math.max(best,meters)+" m\nESSÊNCIA: "+this.score+"\n\nESPAÇO OU TOQUE: REINICIAR").setVisible(true);
-    this.pauseButton.setVisible(false);
+    const stats:RunStats={
+      meters:Math.floor(this.distance/10),essence:this.score,
+      jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
+      tier:difficulty(this.distance).tier
+    };
+    const result=progressStore.finish(stats);
+    if(result.newRecord&&result.previousBest>0)retroAudio.play("record");
+    this.scene.start("results",{stats,progress:result.progress,
+      newRecord:result.newRecord,unlocked:result.unlocked,
+      forceTutorial:this.forceTutorial});
   }
   private draw(){
     this.backdrop.mountains.tilePositionX=this.distance*.08;
@@ -289,6 +331,9 @@ class GameScene extends Phaser.Scene {
     }else this.phantom.setTexture("phantom-hurt").setAlpha(1).setScale(1);
     this.hud.setText("PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score);
     this.tierLabel.setText("NÍVEL "+difficulty(this.distance).tier);
+    if(this.tutorialEndTime>0&&this.elapsed>this.tutorialEndTime){
+      this.tutorialBanner.setVisible(false);this.tutorialEndTime=0;
+    }
     this.energyBar.clear();
     this.energyBar.fillStyle(0x11122f).fillRoundedRect(8,27,122,12,2);
     this.energyBar.fillStyle(this.ep<20?0xf49c86:0x60d8f8)
@@ -302,5 +347,5 @@ new Phaser.Game({
   type:Phaser.AUTO,width:W,height:H,parent:"game",backgroundColor:"#171733",
   render:{pixelArt:true,antialias:false},
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene:[MenuScene,GameScene]
+  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene]
 });
