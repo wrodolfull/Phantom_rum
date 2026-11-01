@@ -3,7 +3,7 @@ export default defineConfig({
   testDir:"./tests/e2e",
   timeout:35_000,
   expect:{timeout:15_000},
-  retries:1,
+  retries:0,
   use:{
     baseURL:"http://127.0.0.1:4178",
     headless:true,
