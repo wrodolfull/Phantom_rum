@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import {ChaseInput} from "../input/ChaseInput";
 import {reportMode,reportChaseSeconds} from "../game/diagnostics";
+import {ChaseClock} from "../game/ChaseClock";
 import {progressStore} from "../progression/progress";
 import {retroAudio} from "../audio/RetroAudio";
 import {setupVisuals,ensureAppearanceVisuals,appearanceTexture} from "../art/pixelArt";
@@ -48,6 +49,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
   private waveIndex=0;
   private waves:Wave[]=[];
   private spawnClock=0;
+  private clock=new ChaseClock();
   private t=0;
   private activeSeconds=0;
   private pressure=.16;
@@ -117,6 +119,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
       retroAudio.stop();
     });
     retroAudio.start();
+    this.clock.reset(performance.now());
     this.render();
   }
   private onBackground=()=>{
@@ -125,7 +128,8 @@ export class ChaseFallbackScene extends Phaser.Scene {
   private onVisibility=()=>{if(document.hidden)this.onBackground();};
   private togglePause(){
     if(this.finished)return;
-    this.paused=!this.paused;this.gesture.clear();this.heldPhase=false;
+    this.paused=!this.paused;this.clock.resume(performance.now());
+    this.gesture.clear();this.heldPhase=false;
     retroAudio.pause(this.paused);
     this.pauseButton.setText(this.paused?"▶":"Ⅱ");
     this.hint.setText(this.paused?"PAUSADO — TOQUE ▶ PARA CONTINUAR":
@@ -139,9 +143,9 @@ export class ChaseFallbackScene extends Phaser.Scene {
     if(this.paused||this.finished)return;
     this.lane=Phaser.Math.Clamp(this.lane+dir,0,2) as 0|1|2;
   }
-  update(_time:number,deltaMs:number){
+  update(_time:number,_deltaMs:number){
+    const delta=this.clock.tick(performance.now(),this.paused);
     if(this.paused){this.render();return;}
-    const delta=Math.min(.05,deltaMs/1000);
     const k=this.keys;
     if(Phaser.Input.Keyboard.JustDown(k.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(k.music))retroAudio.toggleMusic();
