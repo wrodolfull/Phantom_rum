@@ -80,7 +80,7 @@ export function finishRun(before:Progress,stats:RunStats){
 export function nextDistanceGoal(bestMeters:number){
   const next=[25,50,100,250,500,1000,2500,5000].find(n=>bestMeters<n);
   if(!next)return {label:"LENDA DO CEMITÉRIO",target:bestMeters,ratio:1};
-  const previous=[0,25,50,100,250,500,1000,2500].findLast(n=>n<next)??0;
+  const previous=[0,25,50,100,250,500,1000,2500].filter(n=>n<next).pop()??0;
   return {label:`PRÓXIMA META: ${next} m`,target:next,
     ratio:Math.max(0,Math.min(1,(bestMeters-previous)/(next-previous)))};
 }
