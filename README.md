@@ -99,3 +99,18 @@ Leia [docs/mobile-beta.md](docs/mobile-beta.md) antes de liberar o link publicam
 - Testes para gestos, novas colisões e solvabilidade da geração.
 
 Detalhes e roteiro de testes em [docs/gesture-enemies-speed.md](docs/gesture-enemies-speed.md).
+
+## Perseguição 3D a partir dos 800 metros (MVP 0.9)
+- O jogador corre automaticamente até 800 m; ao atingir um trecho seguro, a câmera muda para **atrás do Phantom** e começa uma perseguição low-poly com **Three.js**.
+- O caçador fica mais próximo quando há colisões. Três faixas podem ser alternadas por swipe (mobile) ou setas/A/D (desktop).
+- Toque curto pula, segurar ativa a intangibilidade; não há botões grandes na tela.
+- Lápides, portões, barreiras espirituais, Essência e orbes usam regras de colisão próprias.
+- Após a perseguição até 1.150 m, Phantom retorna automaticamente ao modo 2D, mantendo progresso e energia.
+- Renderização 3D carregada sob demanda; fallback para 2D se WebGL indisponível.
+- Para testar imediatamente o modo 3D, abra a URL com `?test_chase=1` e pressione **Jogar**.
+- Testes automatizados cobrem gatilho de transição, persistência do estado, ondas de obstáculos e comandos de swipe.
+
+Detalhes: [docs/3d-chase.md](docs/3d-chase.md).
+
+### Próxima mecânica planejada: incorporação do morcego
+Um morcego especial terá janela de captura sincronizada por um anel pulsante. Ao acertar, Phantom voará por um trecho aéreo de coleta de Essência e retornará ao chão. O conceito está em [docs/bat-possession-roadmap.md](docs/bat-possession-roadmap.md). **Ainda não está implementado.**
