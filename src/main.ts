@@ -3,12 +3,13 @@ import "./style.css";
 import { setupVisuals, addBackdrop } from "./art/pixelArt";
 import { retroAudio } from "./audio/RetroAudio";
 import { PhantomEffects } from "./effects/PhantomEffects";
+import { CoursePlanner, FIRST_SEGMENT_START, GROUND_Y, difficulty, type ObstacleKind } from "./world/course";
+import { canLand, intersectsThing } from "./world/collisions";
 
-const W = 480, H = 270, GROUND = 215, PLAYER_X = 98;
+const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
 const GRAVITY = 900, JUMP = -330;
-type Kind = "wall" | "gap" | "ward" | "orb" | "essence";
-type Thing = { kind: Kind; x: number; width: number; collected?: boolean; sprite?: Phaser.GameObjects.Image };
+type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; sprite?: Phaser.GameObjects.Image };
 type Motion = "grounded" | "jumping" | "falling";
 type Material = "physical" | "intangible";
 const bestKey = "phantom-run-best-v1";
@@ -73,14 +74,16 @@ class GameScene extends Phaser.Scene {
   private holdIntangible=false;
   private needsRelease=false;
   private score=0;
-  private spawnAt=450;
+  private spawnAt=FIRST_SEGMENT_START;
+  private planner!: CoursePlanner;
+  private rightPointers=new Set<number>();
+  private tierLabel!: Phaser.GameObjects.Text;
   private acc=0;
-  private leftHeld=false;
   private rightHeld=false;
   private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key};
   constructor(){super("game");}
   create(){
-    this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=410;this.acc=0;this.leftHeld=false;this.rightHeld=false;this.elapsed=0;
+    this.things=[];this.distance=0;this.speed=125;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.rightHeld=false;this.rightPointers.clear();this.planner=new CoursePlanner(Date.now());this.elapsed=0;
     retroAudio.start();
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>retroAudio.stop());
     this.backdrop = paintBackground(this,0);
@@ -92,6 +95,7 @@ class GameScene extends Phaser.Scene {
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
+    this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
     this.keys=this.input.keyboard!.addKeys({
       space:Phaser.Input.Keyboard.KeyCodes.SPACE,up:Phaser.Input.Keyboard.KeyCodes.UP,
@@ -106,35 +110,47 @@ class GameScene extends Phaser.Scene {
     this.effectsButton.on("pointerdown",()=>{retroAudio.toggleEffects();this.refreshControls();});
     this.pauseButton.on("pointerdown",()=>this.togglePause());
     this.refreshControls();
+    this.input.addPointer(2);
     this.input.on("pointerdown",(p:Phaser.Input.Pointer)=>{
       // HUD buttons are separate interactive targets and must not also jump/restart.
       if(p.y<46)return;
       if(!this.alive){this.scene.restart();return;}
       if(this.paused)return;
-      if(p.x < W/2){this.leftHeld=true;this.jumpQueued=.1;}else this.rightHeld=true;
+      if(p.x < W/2){this.jumpQueued=.1;}
+      else {this.rightPointers.add(p.id);this.rightHeld=true;}
     });
-    this.input.on("pointerup",()=>{this.leftHeld=false;this.rightHeld=false;});
-    this.input.on("pointerupoutside",()=>{this.leftHeld=false;this.rightHeld=false;});
-    for(let i=0;i<4;i++)this.generate();
+    const release=(p:Phaser.Input.Pointer)=>{
+      this.rightPointers.delete(p.id);
+      this.rightHeld=this.rightPointers.size>0;
+    };
+    this.input.on("pointerup",release);
+    this.input.on("pointerupoutside",release);
+    // Preload only the segment(s) actually needed ahead of the player.
+    while(this.spawnAt<W+240)this.generate();
   }
   private generate(){
-    const progression=Math.min(1,this.distance/3500);
-    const n=this.things.filter(t=>t.x>this.spawnAt-450).length;
-    const which=(Math.floor(this.spawnAt/130)*7+n*3)%10;
-    let kind:Kind=which<4?"wall":which<6?"gap":which<8?"orb":which===8&&progression>.2?"ward":"essence";
-    if(this.spawnAt<700)kind=this.spawnAt<550?"wall":"orb";
-    const width=kind==="gap"?45:kind==="wall"?23:kind==="ward"?13:15;
-    const thing:Thing={kind,x:this.spawnAt,width};
-    if(kind!=="gap"){
-      const key = kind==="wall"?"wall":kind==="ward"?"ward":kind==="orb"?"orb":"essence";
-      const y = (kind==="orb"||kind==="essence") ? GROUND-29 : GROUND;
-      thing.sprite=this.add.image(this.spawnAt+width/2, y, key)
-        .setOrigin(.5, (kind==="orb"||kind==="essence")?.5:1).setDepth(5);
+    const segment=this.planner.next({
+      start:this.spawnAt,
+      distance:this.distance,
+      playerX:this.distance+PLAYER_X,
+      energy:this.ep,
+      upcoming:this.things
+        .filter(t=>!t.collected && t.x+t.width>this.distance+PLAYER_X-10)
+        .map(t=>({kind:t.kind,x:t.x,width:t.width}))
+    });
+    this.spawnAt+=segment.length;
+    for(const item of segment.objects){
+      const thing:Thing={...item};
+      if(item.kind!=="gap"){
+        const key=item.kind==="wall"?"wall":item.kind==="ward"?"ward":
+          item.kind==="orb"?"orb":"essence";
+        const y=(item.kind==="orb"||item.kind==="essence")?GROUND-22:GROUND;
+        thing.sprite=this.add.image(item.x+item.width/2,y,key)
+          .setOrigin(.5,(item.kind==="orb"||item.kind==="essence")?.5:1)
+          .setDepth(5);
+      }
+      this.things.push(thing);
     }
-    this.things.push(thing);
-    // All mandatory intangible obstacles are isolated by >= 150px; at max speed, this leaves >= 0.65s.
-    const gap=kind==="wall"?190:kind==="gap"?175:kind==="ward"?190:125;
-    this.spawnAt+=gap+Math.round(progression*20);
   }
   private refreshControls(){
     this.musicButton.setText(retroAudio.musicEnabled?"♫ ON":"♫ OFF");
@@ -162,7 +178,7 @@ class GameScene extends Phaser.Scene {
     retroAudio.update();
     this.acc+=Math.min(delta/1000,.05);
     let steps=0;
-    while(this.acc>=1/60&&steps++<4){this.step(1/60);this.acc-=1/60;}
+    while(this.acc>=1/60&&steps++<4&&this.alive){this.step(1/60);this.acc-=1/60;}
     if(steps>=4)this.acc=0;
     this.draw();
   }
@@ -192,22 +208,24 @@ class GameScene extends Phaser.Scene {
       this.vy=JUMP;this.motion="jumping";this.coyote=0;this.jumpQueued=0;
     }
     const prevY=this.y;
+    const prevX=this.distance+PLAYER_X;
     this.vy+=GRAVITY*dt;
     this.y+=this.vy*dt;
-    this.speed=Math.min(230,125+3*Math.floor(this.distance/1250));
+    this.speed=difficulty(this.distance).speed;
     const dx=this.speed*dt;
     this.distance+=dx;
-    // World coordinates: player is fixed horizontally at PLAYER_X.
     const px=this.distance+PLAYER_X;
-    const feet=this.y+25;
-    const overGap=this.things.some(t=>t.kind==="gap"&&px+9>t.x&&px-9<t.x+t.width);
-    if(this.vy>=0&&feet>=GROUND&&!overGap&&prevY+25<=GROUND+12){this.y=GROUND-25;this.vy=0;this.motion="grounded";}
-    else if(this.motion!=="grounded"||overGap)this.motion=this.vy<0?"jumping":"falling";
+    // Floor support depends on the player's CENTER. Overlapping a ledge with
+    // one foot cannot magically prevent a fall into an actual pit.
+    if(canLand(prevY,this.y,this.vy,px,this.things)){
+      this.y=GROUND-25;this.vy=0;this.motion="grounded";
+    }else this.motion=this.vy<0?"jumping":"falling";
     if(this.y>H+30){this.die();return;}
+    // Continuous hitbox sweep with shared rules covered by unit tests.
+    const swept={beforeX:prevX,afterX:px,beforeY:prevY,afterY:this.y};
     for(const t of this.things){
-      if(t.collected)continue;
-      const inX=px+10>t.x&&px-10<t.x+t.width;
-      const touching=inX&&this.y+22>GROUND-(t.kind==="wall"?39:t.kind==="ward"?49:30)&&this.y<GROUND;
+      if(t.collected||t.kind==="gap")continue;
+      const touching=intersectsThing(t,swept);
       if((t.kind==="essence"||t.kind==="orb")&&touching){
         if(t.kind==="orb"){
           this.ep=Math.min(100,this.ep+25);t.collected=true;
@@ -263,11 +281,14 @@ class GameScene extends Phaser.Scene {
     const airborne=this.motion!=="grounded";
     const texture=airborne?(intangible?"phantom-phase-jump":"phantom-jump"):
       (intangible?"phantom-phase-":"phantom-")+frame;
-    this.phantom.setTexture(texture)
-      .setPosition(PLAYER_X,Math.round(this.y+16))
-      .setAlpha(intangible?.78+.09*Math.sin(this.elapsed*16):1)
-      .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
+    if(this.alive){
+      this.phantom.setTexture(texture)
+        .setPosition(PLAYER_X,Math.round(this.y+16))
+        .setAlpha(intangible?.78+.09*Math.sin(this.elapsed*16):1)
+        .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
+    }else this.phantom.setTexture("phantom-hurt").setAlpha(1).setScale(1);
     this.hud.setText("PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score);
+    this.tierLabel.setText("NÍVEL "+difficulty(this.distance).tier);
     this.energyBar.clear();
     this.energyBar.fillStyle(0x11122f).fillRoundedRect(8,27,122,12,2);
     this.energyBar.fillStyle(this.ep<20?0xf49c86:0x60d8f8)

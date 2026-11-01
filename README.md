@@ -50,3 +50,10 @@ Confira [docs/audio-effects.md](docs/audio-effects.md) para os testes e detalhes
 Veja [docs/visual-design.md](docs/visual-design.md) e [src/art/pixelArt.ts](src/art/pixelArt.ts).
 
 **Em desenvolvimento:** os sprites ainda são um primeiro passe e o gerador procedural não possui validador formal; recomenda-se playtest e checagem do CI antes de produção.
+
+## Jogabilidade e testes (MVP 0.4)
+- Segmentos procedurais em quatro níveis com validação de energia, alcance de salto e tempo de reação.
+- Primeira fase guiada; trechos de recuperação gerados quando os desafios futuros não são seguros.
+- Muros físicos altos exigem intangibilidade; abismos possuem física de apoio corrigida e barreiras têm colisões varridas.
+- Testes automatizados de sementes, soluções e colisões: `npm test`.
+- Consulte [docs/course-validation.md](docs/course-validation.md).
