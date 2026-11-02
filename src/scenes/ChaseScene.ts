@@ -6,6 +6,7 @@ import {activeAppearance} from "../shop/economy";
 import {createChaseEnvironment,createChaseGhost,createChaseHunter,createChaseHazard,
   updateChaseEnvironment,type ChaseEnvironment} from "./chaseArt";
 import {chaseRegionName,type RegionIndex} from "./chaseRegions";
+import {ChaseEffects,animateChaseHazard,chaseCameraOffset} from "./chaseFx";
 import {ChaseInput} from "../input/ChaseInput";
 import {reportMode,reportChaseError,reportChaseSeconds} from "../game/diagnostics";
 import {ChaseClock} from "../game/ChaseClock";
@@ -33,6 +34,8 @@ export class ChaseScene extends Phaser.Scene {
   private heroColor=0xffffff;
   private environment?:ChaseEnvironment;
   private ghostHalo?:T.Object3D;
+  private chaseFx?:ChaseEffects;
+  private laneImpulse=0;
   private lastRegion:RegionIndex=0;
   private regionNoticeUntil=0;
   private hazards:Hazard[]=[];
@@ -88,6 +91,7 @@ export class ChaseScene extends Phaser.Scene {
     this.paused=false;this.returning=false;this.returningTime=0;
     this.ready=false;this.ended=false;this.hudClock=0;this.hitFlash=0;
     this.environment=undefined;this.ghostHalo=undefined;this.hazards=[];
+    this.chaseFx=undefined;this.laneImpulse=0;
     this.lastRegion=0;this.regionNoticeUntil=0;
     this.clock.reset(performance.now());
     reportMode("chase-loading","Three.js import pending");
@@ -197,11 +201,16 @@ export class ChaseScene extends Phaser.Scene {
     if(!this.ready||this.paused||this.returning||this.jumpHeight>.03||this.jumpVelocity>.03)return;
     this.jumpVelocity=6.6;
     this.run.jumps++;
+    this.chaseFx?.emit("jump",this.ghost?.position.x??0,.2,PLAYER_Z,8);
     retroAudio.play("jump");
   }
   private shiftLane(direction:-1|1){
     if(!this.ready||this.paused||this.returning)return;
-    this.lane=Phaser.Math.Clamp(this.lane+direction,0,2) as 0|1|2;
+    const next=Phaser.Math.Clamp(this.lane+direction,0,2) as 0|1|2;
+    if(next===this.lane)return;
+    this.lane=next;
+    this.laneImpulse=direction;
+    this.chaseFx?.emit("lane",this.ghost?.position.x??0,.9,PLAYER_Z,5);
   }
   private togglePause(){
     if(this.returning||this.ended)return;
@@ -253,6 +262,10 @@ export class ChaseScene extends Phaser.Scene {
     this.hunter=createChaseHunter(THREE);
     this.hunter.position.set(-.9,0,7);
     world.add(this.hunter);
+    // Visual effects can be disabled for mobile A/B profiling via ?no_fx=1.
+    if(!new URLSearchParams(location.search).has("no_fx")){
+      this.chaseFx=new ChaseEffects(THREE,world);
+    }
   }
   private spawnWave(){
     if(!this.three||!this.world)return;
@@ -294,8 +307,16 @@ export class ChaseScene extends Phaser.Scene {
     const intro=Math.min(1,this.timeAlive/1.8);
     const ease=intro*intro*(3-2*intro);
     const camera=this.camera!;
-    camera.position.set(8.2*(1-ease),4.8-.3*ease,2.4+8.2*ease);
+    const cameraFx=chaseCameraOffset(
+      this.timeAlive,this.hitFlash/.4,this.laneImpulse,this.returning);
+    camera.position.set(
+      8.2*(1-ease)+cameraFx.x,
+      4.8-.3*ease+cameraFx.y,
+      2.4+8.2*ease
+    );
     camera.lookAt(0,1,-7.8);
+    camera.rotation.z=cameraFx.roll*ease;
+    this.laneImpulse*=Math.max(0,1-dt*8);
     if(this.timeAlive>2.3&&!this.returning){
       const held=this.heldPhase||this.keys!.shift.isDown;
       if(!held)this.phaseLocked=false;
@@ -303,13 +324,18 @@ export class ChaseScene extends Phaser.Scene {
         this.run.energy=Math.max(0,this.run.energy-30*dt);
         if(!held||this.run.energy<=0){
           this.intangible=false;
+          this.chaseFx?.emit("phase",
+            this.ghost?.position.x??0,this.ghost?.position.y??1,PLAYER_Z,7);
           if(this.run.energy<=0)this.phaseLocked=true;
           retroAudio.play("phaseOff");
         }
       }else{
         this.run.energy=Math.min(100,this.run.energy+12*dt);
         if(held&&!this.phaseLocked&&this.run.energy>=10){
-          this.intangible=true;this.run.phases++;retroAudio.play("phaseOn");
+          this.intangible=true;this.run.phases++;
+          this.chaseFx?.emit("phase",
+            this.ghost?.position.x??0,this.ghost?.position.y??1,PLAYER_Z,13);
+          retroAudio.play("phaseOn");
         }
       }
       if(this.ghostMaterial){
@@ -324,10 +350,15 @@ export class ChaseScene extends Phaser.Scene {
         LANE_X[this.lane],Math.min(1,dt*13));
       this.ghost!.position.y=this.jumpHeight+Math.sin(this.timeAlive*11)*.045;
       this.ghost!.rotation.z=-.08*(LANE_X[this.lane]-this.ghost!.position.x);
+      this.chaseFx?.trail(
+        this.ghost!.position.x,this.ghost!.position.y+.83,PLAYER_Z,
+        this.intangible,dt
+      );
       this.hunter!.position.x=Phaser.Math.Linear(this.hunter!.position.x,
         this.ghost!.position.x-.8,Math.min(1,dt*2.1));
       this.hunter!.position.z=7-this.hunterPressure*3.8;
       this.hunter!.rotation.z=Math.sin(this.timeAlive*11)*.035;
+      this.hunter!.position.y=Math.sin(this.timeAlive*11)*.055;
       this.hunterPressure=Math.max(.11,this.hunterPressure-.017*dt);
       // Never allow Phaser's update frequency or WebGL clock to accelerate
       // real-world pursuit time. Distance derives from played seconds.
@@ -344,20 +375,29 @@ export class ChaseScene extends Phaser.Scene {
         // detection. "passed" only gates interaction; it never freezes motion.
         const step=advanceChaseHazard(hazard.obstacle,dt);
         hazard.model.position.z=hazard.obstacle.z;
-        if(hazard.obstacle.kind==="ward"||hazard.obstacle.kind==="essence"||hazard.obstacle.kind==="orb")
-          hazard.model.rotation.y+=dt*1.7;
+        animateChaseHazard(
+          hazard.model,hazard.obstacle.kind,this.timeAlive,dt);
         if(step.crossed){
           const laneNear=Math.abs(hazard.model.position.x-this.ghost!.position.x)<1;
           const verdict=laneNear?chaseCollision(hazard.obstacle,this.lane,
             this.jumpHeight,this.intangible):"miss";
           if(verdict==="hit"){
             this.hunterPressure=Math.min(1,this.hunterPressure+.36);
-            this.hitFlash=.4;retroAudio.play("hit");
+            this.hitFlash=.4;
+            this.chaseFx?.emit("hit",this.ghost!.position.x,
+              this.ghost!.position.y+.9,PLAYER_Z,14);
+            retroAudio.play("hit");
           }else if(verdict==="orb"){
             this.run.energy=Math.min(100,this.run.energy+25);
-            this.run.orbs++;retroAudio.play("orb");
+            this.run.orbs++;
+            this.chaseFx?.emit("orb",
+              hazard.model.position.x,1.2,PLAYER_Z,11);
+            retroAudio.play("orb");
           }else if(verdict==="essence"){
-            this.run.essence++;retroAudio.play("collect");
+            this.run.essence++;
+            this.chaseFx?.emit("collect",
+              hazard.model.position.x,1.2,PLAYER_Z,10);
+            retroAudio.play("collect");
           }
         }
       }
@@ -405,6 +445,7 @@ export class ChaseScene extends Phaser.Scene {
       this.ghostHalo.rotation.z+=dt*.5;
       this.ghostHalo.scale.setScalar(this.intangible?1.22:1);
     }
+    this.chaseFx?.update(dt);
     if(this.hintElement){
       if(this.returning)this.hintElement.textContent="PORTAL ABERTO — VOLTANDO AO CEMITÉRIO 2D";
       else if(this.hitFlash>0)this.hintElement.textContent="O CAÇADOR SE APROXIMA! DESVIE!";
@@ -441,6 +482,8 @@ export class ChaseScene extends Phaser.Scene {
       this.activeSeconds.toFixed(1)+"s at "+
       Math.floor(this.run.distancePx/10)+"m");
     this.returning=true;this.gesture.clear();this.heldPhase=false;
+    this.chaseFx?.emit("phase",
+      this.ghost?.position.x??0,this.ghost?.position.y??1,PLAYER_Z,22);
     this.run.distancePx=Math.max(this.run.distancePx,CHASE_END_PX);
     retroAudio.play("phaseOff");
   }
@@ -471,6 +514,7 @@ export class ChaseScene extends Phaser.Scene {
     window.removeEventListener("blur",this.onBackground);
     document.removeEventListener("visibilitychange",this.onVisibility);
     this.overlay?.remove();this.overlay=undefined;
+    this.chaseFx?.destroy();this.chaseFx=undefined;
     if(this.world){
       this.disposeObject(this.world);
       this.world.clear();this.world=undefined;

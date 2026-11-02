@@ -145,3 +145,16 @@ Para testar o visual diretamente após o deploy, acesse `?test_chase=1&v=0100` e
 - Detalhes, testes e critérios de aceite: [docs/3d-regions.md](docs/3d-regions.md).
 
 Após o deploy: `?test_chase=1&v=0110` com a marca `BUILD 0.11.0-regions-20261102`.
+
+## Efeitos e polimento da perseguição (PR #15)
+- Phantom deixa um rastro de partículas discretas, mais intenso quando intangível.
+- Saltos, mudança de faixa, coleta de Essência e orbes, colisão e troca de fase ganharam feedback visual.
+- Barreiras espirituais pulsam com runas animadas; orbes e Essências têm núcleo/halo em movimento.
+- A câmera reage suavemente a impactos e desvios sem modificar física ou obstáculos.
+- Caçador possui oscilação de corrida e a saída do 3D tem partículas de transição.
+- O 3D usa **uma única pool de até 64 partículas**. O modo 2.5D compatível tem até 40 faíscas desenhadas em Phaser Graphics.
+- Não foram alterados os thresholds de 800/1300 m, tempos, colisões, loja ou modo 2D.
+- Para comparar fluidez, abra a perseguição com `?test_chase=1&no_fx=1` (desliga apenas o pool de partículas do Three.js).
+- Critérios e checklist em [docs/3d-vfx-polish.md](docs/3d-vfx-polish.md).
+
+Versão da página após merge: `BUILD 0.12.0-vfx-20261102`.

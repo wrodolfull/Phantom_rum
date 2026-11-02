@@ -3,6 +3,7 @@ import {ChaseInput} from "../input/ChaseInput";
 import {reportMode,reportChaseSeconds} from "../game/diagnostics";
 import {ChaseClock} from "../game/ChaseClock";
 import {SPOOKY} from "./chaseArt";
+import {ChaseFallbackSparks} from "./chaseFallbackFx";
 import {progressStore} from "../progression/progress";
 import {retroAudio} from "../audio/RetroAudio";
 import {setupVisuals,ensureAppearanceVisuals,appearanceTexture} from "../art/pixelArt";
@@ -60,6 +61,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
   private returnClock=0;
   private hintClock=0;
   private coinsSpark=0;
+  private sparks=new ChaseFallbackSparks();
   constructor(){super("chase-fallback");}
   init(data:{run:RunSnapshot;reason?:string}){
     this.run={...data.run,chaseDone:true};
@@ -74,6 +76,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
     this.t=0;this.activeSeconds=0;this.pressure=.16;
     this.paused=false;this.finished=false;this.returnClock=0;
     this.hintClock=0;this.coinsSpark=0;
+    this.sparks=new ChaseFallbackSparks();
     setupVisuals(this);
     const look=activeAppearance(progressStore.load());
     ensureAppearanceVisuals(this,look.hero,look.accessory);
@@ -139,15 +142,21 @@ export class ChaseFallbackScene extends Phaser.Scene {
   }
   private jump(){
     if(this.paused||this.finished||this.jumping>0||this.jumpSpeed>0)return;
-    this.jumpSpeed=6.6;this.run.jumps++;retroAudio.play("jump");
+    this.jumpSpeed=6.6;this.run.jumps++;
+    this.sparks.emit("jump",this.playerX,209,8);
+    retroAudio.play("jump");
   }
   private changeLane(dir:-1|1){
     if(this.paused||this.finished)return;
-    this.lane=Phaser.Math.Clamp(this.lane+dir,0,2) as 0|1|2;
+    const next=Phaser.Math.Clamp(this.lane+dir,0,2) as 0|1|2;
+    if(next!==this.lane){
+      this.lane=next;this.sparks.emit("lane",this.playerX,191,5);
+    }
   }
   update(_time:number,_deltaMs:number){
     const delta=this.clock.tick(performance.now(),this.paused);
     if(this.paused){this.render();return;}
+    this.sparks.update(delta);
     const k=this.keys;
     if(Phaser.Input.Keyboard.JustDown(k.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(k.music))retroAudio.toggleMusic();
@@ -177,13 +186,16 @@ export class ChaseFallbackScene extends Phaser.Scene {
         this.energy=Math.max(0,this.energy-30*delta);
         if(!held||this.energy===0){
           this.intangible=false;
+          this.sparks.emit("phase",this.playerX,196-this.jumping*23,8);
           if(this.energy===0)this.phaseLocked=true;
           retroAudio.play("phaseOff");
         }
       }else{
         this.energy=Math.min(100,this.energy+12*delta);
         if(held&&!this.phaseLocked&&this.energy>=10){
-          this.intangible=true;this.run.phases++;retroAudio.play("phaseOn");
+          this.intangible=true;this.run.phases++;
+          this.sparks.emit("phase",this.playerX,196-this.jumping*23,10);
+          retroAudio.play("phaseOn");
         }
       }
       this.jumpSpeed-=15.5*delta;
@@ -191,6 +203,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
       if(this.jumping===0)this.jumpSpeed=0;
       this.playerX=Phaser.Math.Linear(this.playerX, W/2+(this.lane-1)*90,
         Math.min(1,delta*12));
+      this.sparks.trail(this.playerX,210-this.jumping*23,this.intangible,delta);
       this.pressure=Math.max(.11,this.pressure-.017*delta);
       this.activeSeconds+=delta;
       reportChaseSeconds(this.activeSeconds);
@@ -210,10 +223,14 @@ export class ChaseFallbackScene extends Phaser.Scene {
           if(effect==="hit"){
             this.pressure=Math.min(1,this.pressure+.36);retroAudio.play("hit");
             this.coinsSpark=.35;
+            this.sparks.emit("hit",this.playerX,195-this.jumping*23,12);
           }else if(effect==="essence"){
-            this.run.essence++;retroAudio.play("collect");
+            this.run.essence++;
+            this.sparks.emit("collect",this.playerX,181,8);
+            retroAudio.play("collect");
           }else if(effect==="orb"){
             this.energy=Math.min(100,this.energy+25);this.run.orbs++;
+            this.sparks.emit("orb",this.playerX,181,9);
             retroAudio.play("orb");
           }
         }
@@ -326,6 +343,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
       Math.floor(this.run.distancePx/10)+"m  ◆ "+this.run.essence+
       "  EP "+Math.floor(this.energy)+"  CAÇADOR "+Math.floor(this.pressure*100)+"%"
     );
+    this.sparks.draw(g);
     if(this.coinsSpark>0){
       g.fillStyle(0xf6a4ac,.18).fillRect(0,0,W,H);
     }
