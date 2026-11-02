@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import {ChaseInput} from "../input/ChaseInput";
 import {reportMode,reportChaseSeconds} from "../game/diagnostics";
 import {ChaseClock} from "../game/ChaseClock";
+import {SPOOKY} from "./chaseArt";
 import {progressStore} from "../progression/progress";
 import {retroAudio} from "../audio/RetroAudio";
 import {setupVisuals,ensureAppearanceVisuals,appearanceTexture} from "../art/pixelArt";
@@ -250,9 +251,11 @@ export class ChaseFallbackScene extends Phaser.Scene {
   private render(){
     const g=this.graphics;g.clear();
     const horizon=123;
-    g.fillStyle(0x28264f).fillRect(0,0,W,H);
-    g.fillStyle(0x4c456f).fillRect(0,56,W,87);
-    g.fillStyle(0xf7d9b2,.83).fillCircle(373,47,21);
+    g.fillGradientStyle(SPOOKY.night,SPOOKY.night,0x39345f,0x39345f,1)
+      .fillRect(0,0,W,H);
+    g.fillStyle(0x655e98,.13).fillCircle(373,47,38);
+    g.fillStyle(0xc8c5ef,.2).fillCircle(373,47,30);
+    g.fillStyle(SPOOKY.moon,.98).fillCircle(373,47,21);
     for(let i=0;i<24;i++){
       g.fillStyle(0xbab1db,.55).fillRect((i*67+23)%W,(i*31)%105,2,2);
     }
@@ -261,18 +264,23 @@ export class ChaseFallbackScene extends Phaser.Scene {
       const x=(i*61+Math.floor(shift)%63)%W;
       g.fillStyle(0x292f4b).fillTriangle(x,152,x+24,108+(i%3)*11,x+45,152);
     }
-    g.fillStyle(0x2a4652).fillRect(0,horizon,W,H-horizon);
-    g.fillStyle(0x554e6b).fillTriangle(217,horizon,263,horizon,410,H);
-    g.fillTriangle(217,horizon,410,H,70,H);
-    g.lineStyle(1,0xb09cba,.56);
+    g.fillStyle(0x293d4a).fillRect(0,horizon,W,H-horizon);
+    g.fillStyle(0x505572).fillTriangle(217,horizon,263,horizon,416,H);
+    g.fillStyle(0x616481).fillTriangle(217,horizon,416,H,65,H);
+    // Bright borders define the playable corridor even at small sizes.
+    g.lineStyle(3,0x9296af,.92);
+    g.lineBetween(217,horizon,65,H);g.lineBetween(263,horizon,416,H);
+    g.lineStyle(1,0xb0a6c7,.6);
     g.lineBetween(217,horizon,70,H);g.lineBetween(263,horizon,410,H);
     for(const side of [-1,1]){
       for(let i=0;i<12;i++){
         const progress=((i/12+this.t*.32)%1);
         const size=4+progress*12;
         const x=W/2+side*(28+progress*215), y=horizon+progress*140;
-        g.fillStyle(i%2?0x56577c:0x777592);
+        g.fillStyle(i%2?0x626a86:0x8289a5);
         g.fillRoundedRect(x-size/2,y-size,size,size*.85,size/4);
+        g.fillStyle(0x384f5c);
+        g.fillRect(x-size/4,y-size-.8,size/2,Math.max(1,size*.09));
         if(i%3===0){
           g.fillStyle(0x3f6571);
           g.fillTriangle(x-4,y-size,x,y-size*2.9,x+5,y-size);
@@ -283,7 +291,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
       const z=((i*4+this.t*23)%64)-58;
       const p=this.project(1,z);
       if(p.t<0||p.t>1.04)continue;
-      g.fillStyle(0xb0a2c7,.8);
+      g.fillStyle(0xc2b8d8,.87);
       const stripe=2+5*p.t;
       const width=1+2*p.t;
       g.fillRect(p.x-35*p.t-5,p.y,stripe,width);
@@ -295,9 +303,9 @@ export class ChaseFallbackScene extends Phaser.Scene {
       const p=this.project(item.lane,item.z);
       if(p.t<0||p.t>1.05)continue;
       const size=4+32*p.t;
-      const color=item.kind==="ward"?0xb474ed:
-        item.kind==="orb"?0x6aebff:
-        item.kind==="essence"?0xffd17b:0x9695b2;
+      const color=item.kind==="ward"?SPOOKY.rune:
+        item.kind==="orb"?SPOOKY.glow:
+        item.kind==="essence"?SPOOKY.essence:SPOOKY.stone;
       g.fillStyle(color,item.kind==="ward"?.75:1);
       if(item.kind==="ward")g.fillRoundedRect(p.x-size*.7,p.y-size*1.8,
         size*1.4,size*1.8,4);
