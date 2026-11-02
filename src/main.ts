@@ -162,6 +162,8 @@ class GameScene extends Phaser.Scene {
   init(data?:{forceTutorial?:boolean;resume?:RunSnapshot}){
     this.resumeData=data?.resume;
     this.forceTutorial=data?.resume?.forceTutorial??(data?.forceTutorial===true);
+    document.documentElement.dataset.phantomPlatformDone=String(
+      data?.resume?.platformDone===true);
     reportMode("runner",data?.resume
       ?"returned at "+Math.floor(data.resume.distancePx/10)+"m":"fresh run");
   }
