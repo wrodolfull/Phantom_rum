@@ -323,9 +323,11 @@ class GameScene extends Phaser.Scene {
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("blur",pauseForBackground);
     window.addEventListener("keydown",this.onBatKeyDown);
+    window.addEventListener("keydown",this.onHunterQADown);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
       this.gesture.clear();
       window.removeEventListener("keydown",this.onBatKeyDown);
+      window.removeEventListener("keydown",this.onHunterQADown);
       document.removeEventListener("visibilitychange",onVisibility);
       window.removeEventListener("blur",pauseForBackground);
     });
@@ -721,13 +723,14 @@ class GameScene extends Phaser.Scene {
   update(_time:number,delta:number){
     const jump=Phaser.Input.Keyboard.JustDown(this.keys.space)||Phaser.Input.Keyboard.JustDown(this.keys.up);
     if(!this.alive){
-      if(jump)this.scene.restart({forceTutorial:this.forceTutorial});
+      if(jump&&!this.capturing)this.scene.restart({forceTutorial:this.forceTutorial});
       else this.particles.update(Math.min(delta/1000,.05),PLAYER_X,this.y+16,false);
       return;
     }
     if(Phaser.Input.Keyboard.JustDown(this.keys.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(this.keys.music)){retroAudio.toggleMusic();this.refreshControls();}
     if(Phaser.Input.Keyboard.JustDown(this.keys.effects)){retroAudio.toggleEffects();this.refreshControls();}
+    if(Phaser.Input.Keyboard.JustDown(this.keys.wave))this.triggerSpectralWave();
     if(this.paused||this.transitioning)return;
     this.gesture.update(performance.now());
     if(jump)this.jumpQueued=.1;
@@ -749,6 +752,9 @@ class GameScene extends Phaser.Scene {
   }
   private step(dt:number){
     this.elapsed+=dt;
+    this.hunterState=tickHunter(this.hunterState,dt);
+    if(this.hunterNoticeTime>0)
+      this.hunterNoticeTime=Math.max(0,this.hunterNoticeTime-dt);
     const previousMaterial=this.material;
     this.holdIntangible=this.keys.shift.isDown||this.gesturePhaseHeld;
     if(!this.holdIntangible)this.needsRelease=false;
@@ -790,7 +796,7 @@ class GameScene extends Phaser.Scene {
     if(canLand(prevY,this.y,this.vy,px,this.things)){
       this.y=GROUND-25;this.vy=0;this.motion="grounded";
     }else this.motion=this.vy<0?"jumping":"falling";
-    if(this.y>H+30){this.die();return;}
+    if(this.y>H+30){this.rescueFromPit();return;}
     // Continuous hitbox sweep with shared rules covered by unit tests.
     const swept={beforeX:prevX,afterX:px,beforeY:prevY,afterY:this.y};
     for(const t of this.things){
@@ -806,11 +812,21 @@ class GameScene extends Phaser.Scene {
           this.particles.burst("collect",PLAYER_X+8,this.y+10,10);retroAudio.play("collect");
         }
       }else if(touching&&requiresIntangible(t.kind)&&this.material==="physical"){
-        this.die();return;
+        if(this.hunterState.waveSeconds>0&&waveBreaksObstacle(t.kind)){
+          t.collected=true;t.sprite?.setVisible(false);
+          this.particles.burst("phaseOn",PLAYER_X,this.y+10,8);
+        }else if(!t.hit){
+          t.hit=true;this.sufferHunterHit("obstacle");
+          if(!this.alive)return;
+        }
       }else if(touching&&requiresPhysical(t.kind)&&this.material==="intangible"){
-        this.die();return;
+        if(!t.hit){
+          t.hit=true;this.sufferHunterHit("obstacle");
+          if(!this.alive)return;
+        }
       }
     }
+    this.collectNearbySouls(prevX,px);
     for(const t of this.things){
       if(t.kind==="wall"&&!t.counted&&px-10>t.x+t.width){t.counted=true;this.walls++;}
     }
@@ -820,6 +836,7 @@ class GameScene extends Phaser.Scene {
       return true;
     });
     while(this.spawnAt<this.distance+W+240)this.generate();
+    this.maybeSpawnSoul();
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
     this.checkChaseTransition();
     this.checkPlatformTransition();
@@ -882,6 +899,7 @@ class GameScene extends Phaser.Scene {
       }
     }
     this.drawBat();
+    this.drawHunterAndSouls();
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
@@ -890,7 +908,9 @@ class GameScene extends Phaser.Scene {
     if(this.alive){
       this.phantom.setTexture(texture)
         .setPosition(PLAYER_X,Math.round(this.y+16))
-        .setAlpha(intangible?.78+.09*Math.sin(this.elapsed*16):1)
+        .setAlpha(this.hunterState.invulnerable>0?
+          .55+.28*Math.sin(this.elapsed*22):
+          intangible?.78+.09*Math.sin(this.elapsed*16):1)
         .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
     }else this.phantom.setTexture(
       appearanceTexture(this.heroId,this.accessoryId,false,"hurt")).setAlpha(1).setScale(1);
