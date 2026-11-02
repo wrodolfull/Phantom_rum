@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
 import * as THREE from "three";
+import {CHASE_REGIONS} from "./chaseRegions";
 import {SPOOKY,createChaseEnvironment,createChaseGhost,
   createChaseHunter,createChaseHazard,updateChaseEnvironment} from "./chaseArt";
 
@@ -25,6 +26,51 @@ describe("Spooky Arcade low-poly art kit",()=>{
     paving.mesh.position.z=12;
     updateChaseEnvironment(env,.02);
     expect(paving.mesh.position.z).toBeLessThan(0);
+  });
+  it("builds all three roadside styles without creating new meshes during movement",()=>{
+    const scene=new THREE.Scene();
+    const env=createChaseEnvironment(THREE,scene);
+    expect(env.scenery.length).toBe(26);
+    for(const prop of env.scenery){
+      expect(prop.styles).toHaveLength(3);
+      expect(prop.styles?.map(g=>g.visible)).toEqual([true,false,false]);
+    }
+    const children=scene.children.length;
+    const first=env.scenery[0];
+    const oldMesh=first.mesh;
+    first.mesh.position.z=12;
+    const region=updateChaseEnvironment(env,.02,24,9600);
+    expect(region).toBe(1);
+    expect(first.mesh).toBe(oldMesh);
+    expect(first.styles?.map(g=>g.visible)).toEqual([false,true,false]);
+    expect(scene.children.length).toBe(children);
+  });
+  it("shifts lights and paving toward each region palette with smooth tinting",()=>{
+    const scene=new THREE.Scene();
+    const env=createChaseEnvironment(THREE,scene);
+    expect(env.region).toBe(0);
+    const before=env.sky.getHex();
+    updateChaseEnvironment(env,.12,24,9600);
+    expect(env.sky.getHex()).not.toBe(before);
+    expect(env.sky.getHex()).not.toBe(CHASE_REGIONS[1].sky);
+    updateChaseEnvironment(env,1,24,11300);
+    expect(env.region).toBe(2);
+    expect(env.sky.getHex()).toBe(CHASE_REGIONS[2].sky);
+    expect(env.fogColor.getHex()).toBe(CHASE_REGIONS[2].fog);
+    expect(env.moonLight.color.getHex()).toBe(CHASE_REGIONS[2].moonlight);
+    expect(env.tileMaterials).toHaveLength(4);
+  });
+  it("keeps unseen regional props hidden until a recycled roadside slot returns",()=>{
+    const scene=new THREE.Scene();
+    const env=createChaseEnvironment(THREE,scene);
+    const first=env.scenery[0];
+    const initial=first.mesh.position.z;
+    updateChaseEnvironment(env,.016,24,11300);
+    expect(first.mesh.position.z).toBeGreaterThan(initial);
+    expect(first.styles?.map(g=>g.visible)).toEqual([true,false,false]);
+    first.mesh.position.z=12;
+    updateChaseEnvironment(env,.03,24,11300);
+    expect(first.styles?.map(g=>g.visible)).toEqual([false,false,true]);
   });
   it("keeps every player cosmetic option in the 3D ghost",()=>{
     for(const hero of ["phantom","spectra","wisp","boozer","luna"] as const){
