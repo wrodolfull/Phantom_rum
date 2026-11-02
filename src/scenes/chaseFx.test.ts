@@ -24,7 +24,7 @@ describe("pooled lightweight 3D VFX",()=>{
     expect(fx.activeCount).toBe(0);
     fx.trail(0,0,0,false,.06);
     expect(fx.activeCount).toBe(1);
-    fx.update(1);
+    for(let i=0;i<16;i++)fx.update(.05);
     expect(fx.activeCount).toBe(0);
     fx.trail(0,0,0,true,.05);
     expect(fx.activeCount).toBe(3);
