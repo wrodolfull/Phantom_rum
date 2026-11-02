@@ -91,6 +91,31 @@ describe("platform physics",()=>{
     const landed={...airborne,grounded:true};
     expect(platformCheckpointFor(landed,first)).toEqual(PLATFORM_CHECKPOINTS[1]);
   });
+  it("has a complete traversable route from entry to exit with three jumps and one phase gate",()=>{
+    let state=initialPlatformState(100);
+    const jumpStarts=[185,335,486];
+    let nextJump=0;
+    let fell=false;
+    let crossed=false;
+    let lastX=state.x;
+    for(let i=0;i<1500;i++){
+      const jump=nextJump<jumpStarts.length && state.grounded &&
+        state.x>=jumpStarts[nextJump] && state.x<jumpStarts[nextJump]+14;
+      if(jump)nextJump++;
+      const phase=state.x>=885&&state.x<=960;
+      const result=stepPlatform(state,{axis:1,jump,phase},1/60);
+      state=result.state;
+      if(result.fell){fell=true;break;}
+      if(platformCanExit(state)){crossed=true;break;}
+      // Runner makes continuous forward progress except at gate edges.
+      if(i%180===0)lastX=state.x;
+    }
+    expect(nextJump,"all rising stair jumps must have been possible").toBe(3);
+    expect(fell,"authoring must not require jumping across an impossible gap").toBe(false);
+    expect(crossed,"the mandatory phase gate must be passable").toBe(true);
+    expect(state.x).toBeGreaterThanOrEqual(PLATFORM_EXIT_X);
+    expect(lastX).toBeGreaterThan(0);
+  });
   it("requires reaching the door on solid ground",()=>{
     expect(platformCanExit({...initialPlatformState(),x:PLATFORM_EXIT_X})).toBe(true);
     expect(platformCanExit({...initialPlatformState(),x:PLATFORM_EXIT_X,grounded:false})).toBe(false);
