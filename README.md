@@ -219,3 +219,12 @@ Ver [docs/2d-hunter-soul-horde.md](docs/2d-hunter-soul-horde.md) para regras, ba
 - QA e critérios em [docs/mobile-readability-events.md](docs/mobile-readability-events.md).
 
 Após o merge e publicação, abra `?v=0170` e confira `BUILD 0.17.0-mobile-events-20261102`.
+
+## PR #21 — Onda Espectral expansiva e melhor continuidade
+- A Onda agora faz um **anel de energia ciano/violeta se expandir pelo cenário**, em vez de um círculo pequeno ao redor do Phantom.
+- Inimigos físicos explodem com partículas quando a Onda os alcança. Buracos e obstáculos espirituais continuam perigosos.
+- Corrigido o aviso equivocado que pedia resgatar 3 Almas após ativar a Onda.
+- Os fantasminhas da Comitiva ficam em duas fileiras visíveis, menos sobrepostos ao Caçador.
+- Indicador **PRÓXIMO MODO EM N m** torna a recorrência de 3D, mansão e morcego mais fácil de acompanhar.
+- Teste de resistência com 960 eventos aleatórios simulados, além do teste de expansão no Chromium móvel.
+- [Guia e QA da PR21](docs/spectral-wave-polish.md). Build esperado: `0.18.0-wave-polish-20261102`.

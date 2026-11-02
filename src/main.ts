@@ -28,6 +28,8 @@ import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
 import {initFullscreen} from "./fullscreen";
+import {waveRadius,waveMayBreak,waveRingAlpha,soulFormationPosition,
+  WAVE_MAX_EFFECTS} from "./game/spectralWave";
 import {newSpecialSchedule,restoreSpecialSchedule,
   scheduleSnapshot,nextSpecialEvent,specialEventReady,chaseEndFor,
   type SpecialSchedule,type SpecialEvent} from "./game/specialEvents";
@@ -157,6 +159,9 @@ class GameScene extends Phaser.Scene {
   private hunterNotice!:Phaser.GameObjects.Text;
   private hunterNoticeTime=0;
   private waveGraphics!:Phaser.GameObjects.Graphics;
+  private waveElapsed=0;
+  private waveShatters=0;
+  private waveShards:{x:number;y:number;life:number;seed:number}[]=[];
   private hunterGlow!:Phaser.GameObjects.Graphics;
   private enemyHints!:Phaser.GameObjects.Graphics;
   private hintLabels:Phaser.GameObjects.Text[]=[];
@@ -205,6 +210,8 @@ class GameScene extends Phaser.Scene {
   private spawnAt=FIRST_SEGMENT_START;
   private planner!: CoursePlanner;
   private tierLabel!: Phaser.GameObjects.Text;
+  private eventHud!:Phaser.GameObjects.Text;
+  private eventHudLast="";
   private tutorialBanner!: Phaser.GameObjects.Text;
   private tutorialEnabled=false;
   private forceTutorial=false;
@@ -238,8 +245,10 @@ class GameScene extends Phaser.Scene {
     this.scheduledMode=null;
     this.capturing=false;this.hunterState=initialHunterState();
     this.nextSoulAt=SOUL_FIRST_AT_PX;this.soulPickups=[];
+    this.waveElapsed=0;this.waveShatters=0;this.waveShards=[];
     this.soulFollowers=[];this.hunterNoticeTime=0;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
+    this.eventHudLast="";
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
     if(this.resumeData){
@@ -322,12 +331,18 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(.5).setDepth(27).setInteractive({useHandCursor:true});
     this.waveButton.setStroke("#172437",3);
     this.waveButton.on("pointerdown",()=>{
-      this.triggerSpectralWave();
-      if(!canActivateSpectralWave(this.hunterState))
-        this.showHunterNotice("RESGATE 3 ALMAS PARA LIBERAR A ONDA",1.3);
+      const canUse=canActivateSpectralWave(this.hunterState);
+      if(canUse)this.triggerSpectralWave();
+      else if(this.hunterState.waveSeconds>0)
+        this.showHunterNotice("ONDA ESPECTRAL EM AÇÃO!",1.1);
+      else this.showHunterNotice("RESGATE 3 ALMAS PARA LIBERAR A ONDA",1.3);
     });
     this.waveButton.setVisible(true);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
+    this.eventHud=this.add.text(W-9,79,"",{
+      fontFamily:"monospace",fontSize:"9px",color:"#ffe6b8",
+      backgroundColor:"#292444",padding:{x:6,y:4}
+    }).setOrigin(1,0).setDepth(21);
     this.tutorialBanner=this.add.text(W/2,109,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
     this.updateTutorial(PLAYER_X);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
@@ -683,15 +698,35 @@ class GameScene extends Phaser.Scene {
     if(!this.alive||this.paused||this.transitioning||
       !canActivateSpectralWave(this.hunterState))return;
     this.hunterState=activateSpectralWave(this.hunterState);
-    this.showHunterNotice("ONDA ESPECTRAL! ABRINDO CAMINHO",2);
+    this.waveElapsed=0;
+    this.waveShatters=0;
+    this.waveShards=[];
+    this.showHunterNotice("ONDA ESPECTRAL! ALMAS EM AÇÃO",2);
     this.particles.burst("phaseOn",PLAYER_X,GROUND-34,25);
     retroAudio.play("phaseOn");
-    // The wave clears physical threats within sight but never pits,
-    // spectral wards, collectibles or the progression transition.
+    // The expanding wavefront destroys obstacles as it reaches them.
+    // It never clears gaps/wards/collectibles or reaches beyond its radius.
+    this.cameras.main.flash(170,82,220,245);
+  }
+  private advanceSpectralWave(dt:number){
+    for(const shard of this.waveShards)shard.life-=dt;
+    this.waveShards=this.waveShards.filter(s=>s.life>0);
+    if(this.hunterState.waveSeconds<=0)return;
+    this.waveElapsed+=dt;
+    const center=this.distance+PLAYER_X;
     for(const t of this.things){
-      const ahead=t.x-this.distance-PLAYER_X;
-      if(!t.collected&&waveBreaksObstacle(t.kind)&&ahead>=-22&&ahead<340){
-        t.collected=true;t.sprite?.setVisible(false);
+      if(!waveMayBreak(t.kind,t.x-center,this.waveElapsed,!!t.collected))
+        continue;
+      t.collected=true;
+      t.sprite?.setVisible(false);
+      this.waveShatters++;
+      const screenX=t.x-this.distance+t.width/2;
+      const sparkleY=t.kind==="bat"?GROUND-43:t.kind==="wall"?
+        GROUND-33:GROUND-21;
+      this.particles.burst("phaseOn",screenX,sparkleY,10);
+      for(let i=0;i<4&&this.waveShards.length<WAVE_MAX_EFFECTS;i++){
+        this.waveShards.push({x:screenX,y:sparkleY,
+          life:.43+i*.03,seed:i+this.waveShatters*9});
       }
     }
   }
@@ -746,10 +781,8 @@ class GameScene extends Phaser.Scene {
       const visible=i<this.hunterState.companions;
       sprite.setVisible(visible);
       if(!visible)continue;
-      const targetX=PLAYER_X-20-i*12;
-      const targetY=this.y+15-9-(i%2)*12;
-      sprite.setPosition(targetX,
-        targetY+Math.sin(this.elapsed*6+i*.8)*2);
+      const position=soulFormationPosition(i,PLAYER_X,this.y+15,this.elapsed);
+      sprite.setPosition(position.x,position.y);
       sprite.setAlpha(this.hunterState.waveSeconds>0?.9:1);
     }
     for(const soul of this.soulPickups){
@@ -761,12 +794,34 @@ class GameScene extends Phaser.Scene {
     }
     this.waveGraphics.clear();
     if(this.hunterState.waveSeconds>0){
-      const phase=this.elapsed*6;
-      const radius=22+Math.sin(phase)*4;
-      this.waveGraphics.lineStyle(2,0x8dedff,.78)
-        .strokeCircle(PLAYER_X,this.y+16,radius);
-      this.waveGraphics.lineStyle(1,0xc7afff,.43)
-        .strokeCircle(PLAYER_X,this.y+16,radius+10);
+      const radius=waveRadius(this.waveElapsed);
+      const alpha=waveRingAlpha(this.waveElapsed,
+        this.hunterState.waveSeconds);
+      // A readable moving wall of light — not a tiny 22px ring.
+      this.waveGraphics.fillStyle(0x63eeff,.075*alpha)
+        .fillCircle(PLAYER_X,this.y+16,radius);
+      for(let i=0;i<3;i++){
+        const size=Math.max(15,radius-i*19);
+        this.waveGraphics.lineStyle(i===0?5:2,
+          i===0?0x91f7ff:0xc6adff,alpha*(1-i*.19))
+          .strokeCircle(PLAYER_X,this.y+16,size);
+      }
+      for(let i=0;i<9;i++){
+        const theta=(i/9)*Math.PI*2+this.elapsed*.27;
+        const x=PLAYER_X+Math.cos(theta)*radius;
+        const y=this.y+16+Math.sin(theta)*radius;
+        if(x<0||x>W||y<0||y>H)continue;
+        this.waveGraphics.fillStyle(0xffffff,alpha*.8)
+          .fillCircle(x,y,2.4);
+      }
+    }
+    for(const shard of this.waveShards){
+      const x=shard.x-this.speed*(.53-shard.life)*.5;
+      const offset=(.53-shard.life)*55;
+      this.waveGraphics.fillStyle(shard.seed%2?0x9dfaff:0xf2c8ff,
+        Math.min(1,shard.life*2))
+        .fillRect(x+(shard.seed%3-1)*offset,
+          shard.y-(shard.seed%4)*offset,3,3);
     }
     this.hunterHud.setText("CAÇADOR "+Math.ceil(this.hunterState.danger)+
       "/100  ALMAS "+this.hunterState.companions+"/5");
@@ -795,6 +850,10 @@ class GameScene extends Phaser.Scene {
       this.hunterState.companions+"/3";
     document.documentElement.dataset.phantomWaveActive=
       String(this.hunterState.waveSeconds>0);
+    document.documentElement.dataset.phantomWaveRadius=
+      this.hunterState.waveSeconds>0?waveRadius(this.waveElapsed).toFixed(1):"0";
+    document.documentElement.dataset.phantomWaveShatters=
+      String(this.waveShatters);
   }
   private onSpectralWaveKeyDown=(event:KeyboardEvent)=>{
     if(event.code==="KeyQ"&&!event.repeat&&this.sys.isActive()&&
@@ -922,6 +981,7 @@ class GameScene extends Phaser.Scene {
       (this.batWorldX===null?1:.76);
     const dx=this.speed*dt;
     this.distance+=dx;
+    this.advanceSpectralWave(dt);
     const px=this.distance+PLAYER_X;
     // Floor support depends on the player's CENTER. Overlapping a ledge with
     // one foot cannot magically prevent a fall into an actual pit.
@@ -1047,6 +1107,18 @@ class GameScene extends Phaser.Scene {
     this.drawBat();
     this.drawHunterAndSouls();
     this.drawEnemyClues();
+    const nextMeters=Math.max(0,
+      Math.ceil((this.specialPlan.nextAtPx-this.distance)/10));
+    const label=this.scheduledMode!==null||
+      this.transitioning||this.batWorldX!==null?
+        "ANOMALIA NO CAMINHO!":
+        nextMeters>0?"PRÓXIMO MODO EM "+nextMeters+"m":"PRÓXIMO MODO PRONTO";
+    if(label!==this.eventHudLast){
+      this.eventHud.setText(label);
+      this.eventHudLast=label;
+    }
+    this.eventHud.setVisible(!this.hunterNotice.visible&&!this.batPrompt?.visible);
+    document.documentElement.dataset.phantomNextSpecialMeters=String(nextMeters);
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
