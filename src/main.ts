@@ -28,6 +28,15 @@ import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
 import {initFullscreen} from "./fullscreen";
+import {ensureHunterHordeArt,PURSUER_TEXTURES,SOUL_PICKUP_TEXTURE,SOUL_FOLLOWER_TEXTURE}
+  from "./art/hunterHordeArt";
+import {
+  initialHunterState,tickHunter,hunterHit,rescueSoul,activateSpectralWave,
+  canActivateSpectralWave,hunterScreenX,waveBreaksObstacle,
+  SOUL_FIRST_AT_PX,SOUL_SPAWN_SPACING_PX,MAX_SOUL_COMPANIONS,
+  SOUL_WAVE_COST,soulPickupReached,safeSoulLocation,
+  type HunterState,type HunterHitKind
+} from "./game/hunterHorde";
 
 // The orientation reminder is dismissible without blocking portrait fallback.
 try{
@@ -43,7 +52,8 @@ const showDebug=new URLSearchParams(location.search).get("debug")==="1";
 const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
 const GRAVITY = 900, JUMP = -330;
-type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; counted?: boolean; sprite?: Phaser.GameObjects.Image };
+type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; counted?: boolean; hit?:boolean; sprite?: Phaser.GameObjects.Image };
+type SoulOnCourse={x:number;collected:boolean;sprite:Phaser.GameObjects.Image};
 type Motion = "grounded" | "jumping" | "falling";
 type Material = "physical" | "intangible";
 
@@ -133,6 +143,18 @@ class GameScene extends Phaser.Scene {
   private energyBar!: Phaser.GameObjects.Graphics;
   private overlay!: Phaser.GameObjects.Text;
   private particles!: PhantomEffects;
+  private hunterState:HunterState=initialHunterState();
+  private hunterSprite!:Phaser.GameObjects.Image;
+  private soulFollowers:Phaser.GameObjects.Image[]=[];
+  private soulPickups:SoulOnCourse[]=[];
+  private nextSoulAt=SOUL_FIRST_AT_PX;
+  private hunterHud!:Phaser.GameObjects.Text;
+  private hunterBar!:Phaser.GameObjects.Graphics;
+  private waveButton!:Phaser.GameObjects.Text;
+  private hunterNotice!:Phaser.GameObjects.Text;
+  private hunterNoticeTime=0;
+  private waveGraphics!:Phaser.GameObjects.Graphics;
+  private capturing=false;
   private pauseButton!: Phaser.GameObjects.Text;
   private musicButton!: Phaser.GameObjects.Text;
   private effectsButton!: Phaser.GameObjects.Text;
@@ -184,7 +206,7 @@ class GameScene extends Phaser.Scene {
   private walls=0;
   private orbs=0;
   private acc=0;
-  private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key};
+  private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key; wave:Phaser.Input.Keyboard.Key};
   constructor(){super("game");}
   init(data?:{forceTutorial?:boolean;resume?:RunSnapshot}){
     this.resumeData=data?.resume;
@@ -202,6 +224,9 @@ class GameScene extends Phaser.Scene {
     this.chaseDone=false;this.platformDone=false;this.batDone=false;
     this.batWorldX=null;this.batNextAtPx=BAT_TRIGGER_PX;
     this.batMessageTime=0;this.transitioning=false;
+    this.capturing=false;this.hunterState=initialHunterState();
+    this.nextSoulAt=SOUL_FIRST_AT_PX;this.soulPickups=[];
+    this.soulFollowers=[];this.hunterNoticeTime=0;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
@@ -214,6 +239,8 @@ class GameScene extends Phaser.Scene {
       this.chaseDone=run.chaseDone;
       this.platformDone=run.platformDone===true;
       this.batDone=run.batDone===true;
+      this.hunterState=initialHunterState(run.hunterDanger,run.soulCompanions);
+      this.nextSoulAt=this.distance+SOUL_FIRST_AT_PX;
       // A safe gap before the first obstacle on returning from the chase.
       this.spawnAt=this.distance+360;
       this.planner=new CoursePlanner(Date.now(),true);
@@ -226,11 +253,18 @@ class GameScene extends Phaser.Scene {
     this.heroId=look.hero;this.accessoryId=look.accessory;
     ensureAppearanceVisuals(this,this.heroId,this.accessoryId);
     ensureBatArt(this);
+    ensureHunterHordeArt(this);
     this.groundTiles=this.add.tileSprite(0, 211, W, H-211, "ground").setOrigin(0,0).setDepth(2);
     this.world=this.add.graphics().setDepth(3);
     this.speedLines=this.add.graphics().setDepth(1);
     this.phantom=this.add.image(PLAYER_X,this.y+16,
       appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
+    this.hunterSprite=this.add.image(hunterScreenX(this.hunterState.danger),
+      GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setDepth(5);
+    this.soulFollowers=Array.from({length:MAX_SOUL_COMPANIONS},()=>
+      this.add.image(-20,GROUND-12,SOUL_FOLLOWER_TEXTURE)
+        .setScale(.64).setDepth(5).setVisible(false));
+    this.waveGraphics=this.add.graphics().setDepth(5);
     this.particles=new PhantomEffects(this);
     this.batRing=this.add.graphics().setDepth(10);
     this.batArt=this.add.image(0,GROUND-87,BAT_SPECIAL_KEY)
@@ -244,14 +278,32 @@ class GameScene extends Phaser.Scene {
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
+    this.add.graphics().setDepth(18).fillStyle(0x201939,.9)
+      .fillRoundedRect(5,46,182,30,4);
+    this.hunterHud=this.add.text(10,48,"",{
+      fontFamily:"monospace",fontSize:"9px",color:"#fff0ee",
+      stroke:"#1d142b",strokeThickness:2
+    }).setDepth(21);
+    this.hunterBar=this.add.graphics().setDepth(21);
+    this.hunterNotice=this.add.text(W/2,82,"",{
+      fontFamily:"monospace",fontSize:"10px",color:"#f9efff",
+      backgroundColor:"#4e375e",padding:{x:6,y:4},align:"center"
+    }).setOrigin(.5,0).setDepth(26).setVisible(false);
+    this.waveButton=this.add.text(424,206,"ONDA [Q]",{
+      fontFamily:"monospace",fontSize:"9px",color:"#e5ffff",
+      backgroundColor:"#33506d",padding:{x:5,y:5}
+    }).setOrigin(.5).setDepth(27).setInteractive({useHandCursor:true});
+    this.waveButton.on("pointerdown",()=>this.triggerSpectralWave());
+    this.waveButton.setVisible(false);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
-    this.tutorialBanner=this.add.text(W/2,61,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
+    this.tutorialBanner=this.add.text(W/2,109,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
     this.updateTutorial(PLAYER_X);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
     this.keys=this.input.keyboard!.addKeys({
       space:Phaser.Input.Keyboard.KeyCodes.SPACE,up:Phaser.Input.Keyboard.KeyCodes.UP,
       shift:Phaser.Input.Keyboard.KeyCodes.SHIFT,esc:Phaser.Input.Keyboard.KeyCodes.ESC,
-      music:Phaser.Input.Keyboard.KeyCodes.M,effects:Phaser.Input.Keyboard.KeyCodes.N
+      music:Phaser.Input.Keyboard.KeyCodes.M,effects:Phaser.Input.Keyboard.KeyCodes.N,
+      wave:Phaser.Input.Keyboard.KeyCodes.Q
     }) as typeof this.keys;
     const uiStyle={fontFamily:"monospace",fontSize:"10px",color:"#f2f1ff",backgroundColor:"#34305c",padding:{x:5,y:5}};
     this.musicButton=this.add.text(348,9,"",uiStyle).setDepth(25).setInteractive({useHandCursor:true});
@@ -309,6 +361,7 @@ class GameScene extends Phaser.Scene {
     });
     // Preload only the segment(s) actually needed ahead of the player.
     while(this.spawnAt<this.distance+W+240)this.generate();
+    this.maybeSpawnSoul();
   }
   private updateTutorial(px:number){
     if(!this.tutorialEnabled)return;
