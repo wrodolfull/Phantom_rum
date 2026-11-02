@@ -49,3 +49,19 @@ test("rescued souls follow Phantom and can trigger one Spectral Wave for 3 souls
   await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","runner");
   expect(errors).toEqual([]);
 });
+
+test("touch-sized on-screen wave control consumes exactly three rescued souls",async({page})=>{
+  const errors:string[]=[];
+  page.on("pageerror",e=>errors.push(e.message));
+  await startRunner(page);
+  for(let i=0;i<3;i++)await page.keyboard.press("j");
+  await expect(page.locator("html")).toHaveAttribute("data-phantom-soul-companions","3");
+  const canvas=page.locator("#game canvas").first();
+  const box=await canvas.boundingBox();
+  if(!box)throw new Error("Phaser canvas missing");
+  // The action is a Phaser text control, rendered into the 480×270 canvas.
+  await page.mouse.click(box.x+box.width*424/480,box.y+box.height*206/270);
+  await expect(page.locator("html")).toHaveAttribute("data-phantom-soul-companions","0");
+  await expect(page.locator("html")).toHaveAttribute("data-phantom-wave-active","true");
+  expect(errors).toEqual([]);
+});
