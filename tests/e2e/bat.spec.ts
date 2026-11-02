@@ -51,3 +51,18 @@ test("bat flight changes altitude, scores finite Essence and lands back in runne
   await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","runner");
   expect(errors).toEqual([]);
 });
+
+test("natural 10-second bat flight automatically lands and resumes runner",async({page})=>{
+  const errors:string[]=[];
+  page.on("pageerror",e=>errors.push(e.message));
+  await start(page,"/?test_flight=1");
+  await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","bat-flight",
+    {timeout:12_000});
+  // No QA exit key: real gameplay timer must end the bonus and trigger landing.
+  await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","runner",
+    {timeout:30_000});
+  await expect(page.locator("html")).toHaveAttribute("data-phantom-bat-done","true");
+  const meters=Number(await page.locator("html").getAttribute("data-phantom-runner-meters"));
+  expect(meters).toBeGreaterThanOrEqual(1835); // 1700m + 135m flight reward
+  expect(errors).toEqual([]);
+});
