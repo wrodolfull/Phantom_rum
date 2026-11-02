@@ -94,5 +94,5 @@ export function specialEventReady(
 }
 /** One chase lasts at least 18 active seconds and never rewinds the run. */
 export function chaseEndFor(startPx:number,speed=255,minSeconds=18):number{
-  return Math.max(13000,startPx+Math.ceil(speed*minSeconds));
+  return startPx+Math.max(5000,Math.ceil(speed*minSeconds));
 }
