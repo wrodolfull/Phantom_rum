@@ -14,6 +14,7 @@ import {
 } from "../game/modes";
 
 const WIDTH=480,HEIGHT=270;
+const PLAYER_Z=2.25;
 const LANE_X=[-2.4,0,2.4] as const;
 type Prop={mesh:T.Object3D;z:number};
 type Hazard={obstacle:ChaseObject;model:T.Group};
