@@ -326,10 +326,12 @@ class GameScene extends Phaser.Scene {
     window.addEventListener("blur",pauseForBackground);
     window.addEventListener("keydown",this.onBatKeyDown);
     window.addEventListener("keydown",this.onHunterQADown);
+    window.addEventListener("keydown",this.onSpectralWaveKeyDown);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
       this.gesture.clear();
       window.removeEventListener("keydown",this.onBatKeyDown);
       window.removeEventListener("keydown",this.onHunterQADown);
+      window.removeEventListener("keydown",this.onSpectralWaveKeyDown);
       document.removeEventListener("visibilitychange",onVisibility);
       window.removeEventListener("blur",pauseForBackground);
     });
@@ -678,6 +680,13 @@ class GameScene extends Phaser.Scene {
     document.documentElement.dataset.phantomWaveActive=
       String(this.hunterState.waveSeconds>0);
   }
+  private onSpectralWaveKeyDown=(event:KeyboardEvent)=>{
+    if(event.code==="KeyQ"&&!event.repeat&&this.sys.isActive()&&
+      this.alive&&!this.paused&&!this.transitioning){
+      event.preventDefault();
+      this.triggerSpectralWave();
+    }
+  };
   private onHunterQADown=(event:KeyboardEvent)=>{
     if(!new URLSearchParams(location.search).has("test_hunter")||
       !this.sys.isActive()||event.repeat||!this.alive||this.paused)return;
@@ -738,7 +747,6 @@ class GameScene extends Phaser.Scene {
     if(Phaser.Input.Keyboard.JustDown(this.keys.esc))this.togglePause();
     if(Phaser.Input.Keyboard.JustDown(this.keys.music)){retroAudio.toggleMusic();this.refreshControls();}
     if(Phaser.Input.Keyboard.JustDown(this.keys.effects)){retroAudio.toggleEffects();this.refreshControls();}
-    if(Phaser.Input.Keyboard.JustDown(this.keys.wave))this.triggerSpectralWave();
     if(this.paused||this.transitioning)return;
     this.gesture.update(performance.now());
     if(jump)this.jumpQueued=.1;
@@ -856,6 +864,7 @@ class GameScene extends Phaser.Scene {
     this.material="physical";
     this.gesture.clear();this.holdIntangible=false;
     this.hunterState={...this.hunterState,danger:100,invulnerable:0,waveSeconds:0};
+    document.documentElement.dataset.phantomHunterDanger="100";
     this.hunterSprite.setDepth(12);
     this.showHunterNotice("100/100 — O CAÇADOR PEGOU PHANTOM!",3);
     this.particles.burst("hit",PLAYER_X,this.y+15,28);
