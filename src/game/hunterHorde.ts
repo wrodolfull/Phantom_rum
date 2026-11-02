@@ -55,7 +55,7 @@ export function hunterHit(state:HunterState,kind:HunterHitKind):HunterHitResult{
   if(state.invulnerable>0||state.danger>=100)
     return {state,hit:false,caught:state.danger>=100,protectedBySoul:false,amount:0};
   const protectedBySoul=state.companions>0;
-  const amount=protectedBySoul?(kind==="pit"?17:12):(kind==="pit"?36:28);
+  const amount=protectedBySoul?(kind==="pit"?17:12):(kind==="pit"?36:25);
   const danger=Math.min(MAX_HUNTER_DANGER,state.danger+amount);
   return {
     state:{...state,danger,companions:state.companions-(protectedBySoul?1:0),
