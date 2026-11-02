@@ -208,3 +208,14 @@ Mecânica original inspirada em corridas de grupo:
 Ver [docs/2d-hunter-soul-horde.md](docs/2d-hunter-soul-horde.md) para regras, balanceamento e testes.
 
 **Teste:** após merge e publicação, entre em `?test_hunter=1&v=0160`, confira **BUILD 0.16.0-hunter-20261102**. Nessa URL de QA, H simula erro, J resgata alma e Q ativa onda. Para testar o fluxo real, use o jogo normalmente.
+
+## PR #20 — Inimigos legíveis, Onda mobile e eventos aleatórios recorrentes
+- **Caçador 2D maior e sempre visível**, com brilho de lanterna e barra de perigo ampliada.
+- **Onda Espectral sempre visível** (`0/3 → 1/3 → 2/3 → PRONTA`) em botão adequado para toque; as primeiras almas aparecem cedo.
+- **Perseguição 3D, Mansão e morcego se repetem** em intervalos de corrida com aleatoriedade controlada: sem duas modalidades iguais seguidas e preferência por formatos menos vistos.
+- Primeira oportunidade especial a partir de ~260–350m, próximas oportunidades separadas por trechos 2D de pelo menos ~175m.
+- Perseguições 3D repetidas têm término próprio, evitando reduzir o contador de metros ou ficar presas aos 1300m originais.
+- Sprite original redesenhado para morcego, guardião, espectro, espinhos, lápides, muros e barreiras, com rótulos `PULAR`, `FASE` ou `FÍSICO` próximos dos perigos.
+- QA e critérios em [docs/mobile-readability-events.md](docs/mobile-readability-events.md).
+
+Após o merge e publicação, abra `?v=0170` e confira `BUILD 0.17.0-mobile-events-20261102`.
