@@ -11,8 +11,8 @@ export const HUNTER_HIT_COOLDOWN=1.35;
 export const HUNTER_DANGER_RECOVERY_DELAY=3.5;
 export const HUNTER_DANGER_RECOVERY_PER_SECOND=1.4;
 export const MAX_SOUL_COMPANIONS=5;
-export const SOUL_FIRST_AT_PX=760;
-export const SOUL_SPAWN_SPACING_PX=1190;
+export const SOUL_FIRST_AT_PX=250;
+export const SOUL_SPAWN_SPACING_PX=510;
 export const SOUL_WAVE_COST=3;
 export const SOUL_WAVE_SECONDS=2.7;
 export const SOUL_WAVE_PRESSURE_RELIEF=18;
@@ -83,7 +83,7 @@ export function waveBreaksObstacle(kind:string):boolean{
 }
 /** Pursuer is always visible behind Phantom, drawing closer with mistakes. */
 export function hunterScreenX(danger:number,playerX=98):number{
-  return playerX-84+between(danger,0,100)*.73;
+  return playerX-72+between(danger,0,100)*.55;
 }
 export function soulPickupReached(
   beforeX:number,afterX:number,soulWorldX:number,grounded:boolean,physical:boolean
