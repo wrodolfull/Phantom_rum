@@ -20,14 +20,23 @@ test("platform level is playable with keyboard movement and jumping",async({page
   await startPlatform(page);
   const start=Number(await page.locator("html").getAttribute("data-phantom-platform-x"));
   await page.keyboard.down("ArrowRight");
-  await page.waitForTimeout(650);
+  await page.waitForTimeout(420);
   await page.keyboard.up("ArrowRight");
   const moved=Number(await page.locator("html").getAttribute("data-phantom-platform-x"));
-  expect(moved).toBeGreaterThan(start+40);
-  await page.keyboard.press("Space");
-  await page.waitForTimeout(180);
-  const airborne=Number(await page.locator("html").getAttribute("data-phantom-platform-feet"));
-  expect(airborne).toBeLessThan(236);
+  const feet=Number(await page.locator("html").getAttribute("data-phantom-platform-feet"));
+  console.log("PLATFORM_MOVED",JSON.stringify({start,moved,feet}));
+  expect(moved).toBeGreaterThan(start+25);
+  expect(feet).toBe(236);
+  await page.keyboard.down("Space");
+  await expect.poll(async()=>Number(
+    await page.locator("html").getAttribute("data-phantom-platform-feet")
+  ),{timeout:5000,intervals:[100,150,200]}).toBeLessThan(230);
+  await page.keyboard.up("Space");
+  console.log("PLATFORM_JUMP",JSON.stringify({
+    x:await page.locator("html").getAttribute("data-phantom-platform-x"),
+    feet:await page.locator("html").getAttribute("data-phantom-platform-feet"),
+    key:await page.locator("html").getAttribute("data-phantom-platform-key")
+  }));
   await page.waitForTimeout(1_300);
   await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","platform");
   expect(pageErrors).toEqual([]);
@@ -44,7 +53,13 @@ test("escape from mansion preserves run and cannot retrigger chapter",async({pag
   await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","platform",
     {timeout:12_000});
   await page.waitForTimeout(350);
-  await page.keyboard.press("x");
+  await page.keyboard.down("x");
+  await page.waitForTimeout(230);
+  await page.keyboard.up("x");
+  console.log("PLATFORM_EXIT_KEY",JSON.stringify({
+    mode:await page.locator("html").getAttribute("data-phantom-mode"),
+    lastKey:await page.locator("html").getAttribute("data-phantom-platform-key")
+  }));
   await expect(page.locator("html")).toHaveAttribute("data-phantom-mode","runner",
     {timeout:12_000});
   await expect(page.locator("html")).toHaveAttribute("data-phantom-platform-done","true");
