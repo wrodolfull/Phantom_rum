@@ -281,6 +281,12 @@ class GameScene extends Phaser.Scene {
     this.hunterSprite=this.add.image(hunterScreenX(this.hunterState.danger),
       GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setScale(1.48).setDepth(5);
     this.enemyHints=this.add.graphics().setDepth(7);
+    this.hintLabels=Array.from({length:4},()=>
+      this.add.text(-120,-120,"",{
+        fontFamily:"monospace",fontSize:"10px",color:"#ffffff",
+        backgroundColor:"#4f2b70",padding:{x:5,y:3},
+        stroke:"#16162f",strokeThickness:1
+      }).setOrigin(.5,1).setDepth(9).setVisible(false));
     this.soulFollowers=Array.from({length:MAX_SOUL_COMPANIONS},()=>
       this.add.image(-20,GROUND-12,SOUL_FOLLOWER_TEXTURE)
         .setScale(.64).setDepth(5).setVisible(false));
@@ -689,6 +695,38 @@ class GameScene extends Phaser.Scene {
       }
     }
   }
+  private drawEnemyClues(){
+    this.enemyHints.clear();
+    let used=0;
+    for(const t of this.things){
+      if(t.collected||used>=this.hintLabels.length)continue;
+      const x=t.x-this.distance;
+      if(x<PLAYER_X+70||x>W-8)continue;
+      let label:string|undefined,color=0x9f75d6;
+      let y=GROUND-45;
+      if(t.kind==="gap"){label="PULAR";color=0xffba80;y=GROUND-12;}
+      else if(t.kind==="wall"){label="FASE";color=0x96e4f6;y=GROUND-73;}
+      else if(t.kind==="bat"||t.kind==="hunter"||t.kind==="spikes"){
+        label="FASE";color=0xff9aa8;
+        y=t.kind==="spikes"?GROUND-27:t.kind==="bat"?GROUND-51:GROUND-69;
+      }else if(t.kind==="ward"||t.kind==="wraith"){
+        label="FÍSICO";color=0xe7baff;
+        y=t.kind==="ward"?GROUND-55:GROUND-58;
+      }
+      if(!label)continue;
+      const spot=this.hintLabels[used++];
+      const screenX=Math.max(25,Math.min(W-28,x+t.width/2));
+      const py=Math.max(99,y+Math.sin(this.elapsed*4+used)*2);
+      spot.setText(label)
+        .setPosition(screenX,py).setVisible(true);
+      this.enemyHints.lineStyle(2,color,.84)
+        .lineBetween(screenX,py+4,screenX,py+11);
+      this.enemyHints.fillStyle(color,.8)
+        .fillTriangle(screenX-3,py+11,screenX+3,py+11,screenX,py+17);
+    }
+    for(let i=used;i<this.hintLabels.length;i++)
+      this.hintLabels[i].setVisible(false);
+  }
   private drawHunterAndSouls():void{
     const hunterX=hunterScreenX(this.hunterState.danger);
     this.hunterSprite.setTexture(PURSUER_TEXTURES[Math.floor(this.elapsed*7)%2])
@@ -1002,6 +1040,7 @@ class GameScene extends Phaser.Scene {
     }
     this.drawBat();
     this.drawHunterAndSouls();
+    this.drawEnemyClues();
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
