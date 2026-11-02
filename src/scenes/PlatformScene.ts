@@ -142,16 +142,31 @@ export class PlatformScene extends Phaser.Scene{
     this.input.on("pointerupoutside",(p:Phaser.Input.Pointer)=>
       this.driver.cancel(p.id));
     window.addEventListener("blur",this.onBlur);
+    window.addEventListener("keydown",this.onKeyDown);
     document.addEventListener("visibilitychange",this.onVisibility);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
       this.driver.clear();
       window.removeEventListener("blur",this.onBlur);
+      window.removeEventListener("keydown",this.onKeyDown);
       document.removeEventListener("visibilitychange",this.onVisibility);
       retroAudio.stop();
     });
     this.refreshHud();
     this.cameras.main.fadeIn(490,22,17,51);
   }
+  private onKeyDown=(event:KeyboardEvent)=>{
+    if(!this.sys.isActive()||this.paused||this.exiting)return;
+    document.documentElement.dataset.phantomPlatformKey=event.code;
+    if((event.code==="Space"||event.code==="ArrowUp")&&!event.repeat){
+      event.preventDefault();
+      this.jumpRequested=true;
+    }
+    const qa=new URLSearchParams(location.search);
+    if(event.code==="KeyX"&&qa.has("test_platform")&&qa.has("qa_exit")){
+      event.preventDefault();
+      this.complete();
+    }
+  };
   private onBlur=()=>{
     if(this.sys.isActive()&&!this.paused&&!this.exiting)this.togglePause();
   };
@@ -274,13 +289,6 @@ export class PlatformScene extends Phaser.Scene{
     if(Phaser.Input.Keyboard.JustDown(this.keys.music))retroAudio.toggleMusic();
     if(Phaser.Input.Keyboard.JustDown(this.keys.effects))retroAudio.toggleEffects();
     if(this.paused||this.exiting)return;
-    if(Phaser.Input.Keyboard.JustDown(this.keys.space)||
-      Phaser.Input.Keyboard.JustDown(this.keys.up))this.jumpRequested=true;
-    const qa=new URLSearchParams(location.search);
-    if(qa.has("test_platform")&&qa.has("qa_exit")&&
-      Phaser.Input.Keyboard.JustDown(this.keys.qaExit)){
-      this.complete();return;
-    }
     this.driver.update(performance.now());
     this.acc+=Math.min(deltaMs/1000,.05);
     let steps=0;
