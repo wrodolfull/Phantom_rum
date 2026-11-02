@@ -256,6 +256,11 @@ export class PlatformScene extends Phaser.Scene{
     }
   }
   private refreshHud(){
+    // DOM diagnostics support browser tests without coupling to Phaser internals.
+    document.documentElement.dataset.phantomPlatformX=this.state.x.toFixed(1);
+    document.documentElement.dataset.phantomPlatformFeet=this.state.feetY.toFixed(1);
+    document.documentElement.dataset.phantomPlatformEnergy=this.state.energy.toFixed(1);
+    document.documentElement.dataset.phantomPlatformEssence=String(this.run.essence);
     this.hud.setText("MANSÃO DAS ALMAS  "+Math.floor(this.run.distancePx/10)+
       " m  ◆ "+this.run.essence+"\nEP "+Math.ceil(this.state.energy)+
       "   SAÍDA "+Math.max(0,Math.floor((PLATFORM_EXIT_X-this.state.x)/10))+" m");
