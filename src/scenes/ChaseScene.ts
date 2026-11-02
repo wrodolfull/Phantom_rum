@@ -3,20 +3,20 @@ import type * as T from "three";
 import {retroAudio} from "../audio/RetroAudio";
 import {progressStore} from "../progression/progress";
 import {activeAppearance} from "../shop/economy";
-import {heroById} from "../shop/catalog";
+import {createChaseEnvironment,createChaseGhost,createChaseHunter,createChaseHazard,
+  updateChaseEnvironment,type ChaseEnvironment} from "./chaseArt";
 import {ChaseInput} from "../input/ChaseInput";
 import {reportMode,reportChaseError,reportChaseSeconds} from "../game/diagnostics";
 import {ChaseClock} from "../game/ChaseClock";
 import {
   CHASE_END_PX,CHASE_WORLD_SPEED,chaseCompleted,mergeRun,asRunStats,chaseCollision,waveAt,
   advanceChaseHazard,CHASE_DESPAWN_Z,
-  type ChaseObject,type ChaseObstacleKind,type RunSnapshot
+  type ChaseObject,type RunSnapshot
 } from "../game/modes";
 
 const WIDTH=480,HEIGHT=270;
 const PLAYER_Z=2.25;
 const LANE_X=[-2.4,0,2.4] as const;
-type Prop={mesh:T.Object3D;z:number};
 type Hazard={obstacle:ChaseObject;model:T.Group};
 type ThreeApi=typeof import("three");
 
@@ -30,8 +30,8 @@ export class ChaseScene extends Phaser.Scene {
   private hunter?:T.Group;
   private ghostMaterial?:T.MeshStandardMaterial;
   private heroColor=0xffffff;
-  private graveProps:Prop[]=[];
-  private laneMarks:Prop[]=[];
+  private environment?:ChaseEnvironment;
+  private ghostHalo?:T.Object3D;
   private hazards:Hazard[]=[];
   private gesture!:ChaseInput;
   private overlay?:HTMLDivElement;
@@ -84,7 +84,7 @@ export class ChaseScene extends Phaser.Scene {
     this.intangible=false;this.heldPhase=false;this.phaseLocked=false;
     this.paused=false;this.returning=false;this.returningTime=0;
     this.ready=false;this.ended=false;this.hudClock=0;this.hitFlash=0;
-    this.graveProps=[];this.laneMarks=[];this.hazards=[];
+    this.environment=undefined;this.ghostHalo=undefined;this.hazards=[];
     this.clock.reset(performance.now());
     reportMode("chase-loading","Three.js import pending");
     retroAudio.start();
@@ -216,179 +216,44 @@ export class ChaseScene extends Phaser.Scene {
   }
   private createWorld(THREE:ThreeApi){
     const world=new THREE.Scene();
-    world.background=new THREE.Color(0x232348);
-    world.fog=new THREE.Fog(0x29264b,17,83);
-    const camera=new THREE.PerspectiveCamera(64,WIDTH/HEIGHT,.1,140);
-    camera.position.set(9,4.8,2.4);
-    camera.lookAt(0,1,-10);
+    const camera=new THREE.PerspectiveCamera(63,WIDTH/HEIGHT,.1,140);
+    camera.position.set(8.2,4.8,2.4);
+    camera.lookAt(0,1,-8);
     let renderer:T.WebGLRenderer;
     try{
-      renderer=new THREE.WebGLRenderer({alpha:false,antialias:false,powerPreference:"low-power"});
+      renderer=new THREE.WebGLRenderer({
+        alpha:false,antialias:false,powerPreference:"low-power"
+      });
     }catch(error){throw new Error("WebGL 3D renderer unavailable",{cause:error});}
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.35));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,1.3));
     renderer.setSize(WIDTH,HEIGHT,false);
     renderer.outputColorSpace=THREE.SRGBColorSpace;
+    // Filmic highlights preserve the moon/lantern glow without a costly bloom pass.
+    renderer.toneMapping=THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure=1.18;
     renderer.domElement.className="chase-three-canvas";
     renderer.domElement.style.pointerEvents="none";
     renderer.domElement.addEventListener("webglcontextlost",this.onContextLost,false);
     document.getElementById("game")?.appendChild(renderer.domElement);
     this.threeRenderer=renderer;this.world=world;this.camera=camera;
-    world.add(new THREE.AmbientLight(0xb1addb,1.6));
-    const moonlight=new THREE.DirectionalLight(0xc4dcff,2);
-    moonlight.position.set(-8,15,-15);world.add(moonlight);
-    const floorMaterial=new THREE.MeshStandardMaterial({color:0x51486c,roughness:1});
-    const road=new THREE.Mesh(new THREE.BoxGeometry(7.3,.16,130),floorMaterial);
-    road.position.set(0,-.13,-28);
-    world.add(road);
-    const shoulder=new THREE.Mesh(new THREE.BoxGeometry(17,.08,130),
-      new THREE.MeshStandardMaterial({color:0x283c4b,roughness:1}));
-    shoulder.position.set(0,-.26,-28);
-    world.add(shoulder);
-    // Perspective lane separators, with repeated strips moving toward the camera.
-    for(const x of [-1.2,1.2]){
-      for(let i=0;i<28;i++){
-        const mark=new THREE.Mesh(new THREE.BoxGeometry(.055,.02,1),
-          new THREE.MeshBasicMaterial({color:0x9a8aaf}));
-        mark.position.set(x,-.037,-i*3);
-        world.add(mark);
-        this.laneMarks.push({mesh:mark,z:mark.position.z});
-      }
-    }
-    for(let side of [-1,1]){
-      for(let i=0;i<11;i++){
-        const prop=this.makeGraveProp(THREE,i);
-        prop.position.set(side*(4.7+(i%3)*1.3),0,-i*10-(side+1)*4);
-        world.add(prop);
-        this.graveProps.push({mesh:prop,z:prop.position.z});
-      }
-    }
+
+    this.environment=createChaseEnvironment(THREE,world);
     const look=activeAppearance(progressStore.load());
-    const palette=heroById(look.hero);
-    this.heroColor=parseInt(palette.body.substring(1),16);
-    this.ghostMaterial=new THREE.MeshStandardMaterial({
-      color:new THREE.Color(palette.body),roughness:.63,transparent:true,opacity:1
-    });
-    this.ghost=this.makeGhost(THREE,look.accessory);
+    const ghost=createChaseGhost(THREE,look.hero,look.accessory);
+    this.heroColor=ghost.color;
+    this.ghostMaterial=ghost.bodyMaterial;
+    this.ghostHalo=ghost.halo;
+    this.ghost=ghost.model;
     this.ghost.position.set(0,0,PLAYER_Z);
     world.add(this.ghost);
-    this.hunter=this.makeHunter(THREE);
+    this.hunter=createChaseHunter(THREE);
     this.hunter.position.set(-.9,0,7);
     world.add(this.hunter);
-  }
-  private makeGraveProp(THREE:ThreeApi,index:number):T.Group{
-    const group=new THREE.Group();
-    const stone=new THREE.MeshStandardMaterial({color:index%2?0x59587c:0x6b6987,roughness:1});
-    const wood=new THREE.MeshStandardMaterial({color:0x383f58,roughness:1});
-    if(index%4===0){
-      const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18,.24,2.5,5),wood);
-      trunk.position.y=1.2;group.add(trunk);
-      const crown=new THREE.Mesh(new THREE.ConeGeometry(1.3,3.4,5),
-        new THREE.MeshStandardMaterial({color:0x365c66,flatShading:true}));
-      crown.position.y=3.4;group.add(crown);
-    }else{
-      const tomb=new THREE.Mesh(new THREE.BoxGeometry(1,.95,.35),stone);
-      tomb.position.y=.47;group.add(tomb);
-      const top=new THREE.Mesh(new THREE.SphereGeometry(.5,7,4),stone);
-      top.scale.set(1,.45,.4);top.position.y=.96;group.add(top);
-      if(index%3===0){
-        const cross=new THREE.Mesh(new THREE.BoxGeometry(.15,.65,.17),stone);
-        cross.position.y=1.45;group.add(cross);
-        const beam=new THREE.Mesh(new THREE.BoxGeometry(.53,.14,.17),stone);
-        beam.position.y=1.57;group.add(beam);
-      }
-    }
-    return group;
-  }
-  private makeGhost(THREE:ThreeApi,accessory:string):T.Group{
-    const g=new THREE.Group(),skin=this.ghostMaterial!;
-    const head=new THREE.Mesh(new THREE.SphereGeometry(.54,12,9),skin);
-    head.position.y=1.13;g.add(head);
-    const tail=new THREE.Mesh(new THREE.ConeGeometry(.48,.72,9),skin);
-    tail.rotation.z=Math.PI;tail.position.y=.56;g.add(tail);
-    const blur=new THREE.Mesh(new THREE.TorusGeometry(.6,.065,4,14),
-      new THREE.MeshBasicMaterial({color:0x78dcf5,transparent:true,opacity:.55}));
-    blur.rotation.x=Math.PI/2;blur.position.y=.12;g.add(blur);
-    const accent=new THREE.Mesh(new THREE.BoxGeometry(.38,.1,.09),
-      new THREE.MeshBasicMaterial({color:0x98d6ec}));
-    accent.position.set(0,1.15,.5);g.add(accent);
-    if(accessory==="hat"){
-      const hat=new THREE.Mesh(new THREE.CylinderGeometry(.28,.37,.48,7),
-        new THREE.MeshStandardMaterial({color:0x7752ae}));
-      hat.position.y=1.78;g.add(hat);
-    }else if(accessory==="crown"){
-      const crown=new THREE.Mesh(new THREE.CylinderGeometry(.33,.37,.25,7),
-        new THREE.MeshStandardMaterial({color:0xffd274,metalness:.16}));
-      crown.position.y=1.69;g.add(crown);
-    }else if(accessory==="ribbon"){
-      const ribbon=new THREE.Mesh(new THREE.BoxGeometry(.48,.16,.12),
-        new THREE.MeshStandardMaterial({color:0xf582a1}));
-      ribbon.position.set(.32,1.54,.15);g.add(ribbon);
-    }
-    return g;
-  }
-  private makeHunter(THREE:ThreeApi):T.Group{
-    const g=new THREE.Group();
-    const cloth=new THREE.MeshStandardMaterial({color:0x423950,roughness:1});
-    const face=new THREE.MeshStandardMaterial({color:0xc2a58f});
-    const coat=new THREE.Mesh(new THREE.CylinderGeometry(.37,.52,1.25,6),cloth);
-    coat.position.y=.9;g.add(coat);
-    const head=new THREE.Mesh(new THREE.SphereGeometry(.31,8,6),face);
-    head.position.y=1.72;g.add(head);
-    const hat=new THREE.Mesh(new THREE.CylinderGeometry(.42,.42,.16,7),cloth);
-    hat.position.y=2.04;g.add(hat);
-    const brim=new THREE.Mesh(new THREE.CylinderGeometry(.59,.59,.07,8),cloth);
-    brim.position.y=1.98;g.add(brim);
-    for(const x of [-.21,.21]){
-      const foot=new THREE.Mesh(new THREE.BoxGeometry(.2,.62,.2),cloth);
-      foot.position.set(x,.17,.05);g.add(foot);
-    }
-    const lamp=new THREE.Mesh(new THREE.SphereGeometry(.17,8,6),
-      new THREE.MeshBasicMaterial({color:0xffdf9d}));
-    lamp.position.set(-.68,.92,-.38);g.add(lamp);
-    const light=new THREE.PointLight(0xffd89b,3.2,8);
-    light.position.copy(lamp.position);g.add(light);
-    g.scale.setScalar(.76);
-    return g;
-  }
-  private hazardModel(THREE:ThreeApi,kind:ChaseObstacleKind):T.Group{
-    const g=new THREE.Group();
-    const stone=new THREE.MeshStandardMaterial({color:0x7b819d,roughness:1});
-    const magic=new THREE.MeshBasicMaterial({color:0xb77bfa,transparent:true,opacity:.7});
-    if(kind==="stone"){
-      const grave=new THREE.Mesh(new THREE.BoxGeometry(1.05,1.15,.38),stone);
-      grave.position.y=.57;g.add(grave);
-      const crest=new THREE.Mesh(new THREE.SphereGeometry(.54,9,5),stone);
-      crest.position.y=1.15;crest.scale.y=.35;g.add(crest);
-    }else if(kind==="arch"){
-      for(const x of [-.74,.74]){
-        const column=new THREE.Mesh(new THREE.BoxGeometry(.4,2.9,.5),stone);
-        column.position.set(x,1.42,0);g.add(column);
-      }
-      const top=new THREE.Mesh(new THREE.BoxGeometry(2.1,.48,.53),stone);
-      top.position.y=2.9;g.add(top);
-      const gate=new THREE.Mesh(new THREE.BoxGeometry(1.25,2.5,.1),
-        new THREE.MeshBasicMaterial({color:0x8b7ca8,transparent:true,opacity:.73}));
-      gate.position.y=1.2;g.add(gate);
-    }else if(kind==="ward"){
-      const screen=new THREE.Mesh(new THREE.BoxGeometry(1.8,2.5,.14),magic);
-      screen.position.y=1.4;g.add(screen);
-      const rim=new THREE.Mesh(new THREE.TorusGeometry(.88,.08,6,12),magic);
-      rim.scale.y=1.38;rim.position.y=1.45;g.add(rim);
-    }else{
-      const orb=new THREE.Mesh(new THREE.OctahedronGeometry(.38,0),
-        new THREE.MeshBasicMaterial({color:kind==="orb"?0x71e8ff:0xffd87e}));
-      orb.position.y=1.25;g.add(orb);
-      const glow=new THREE.Mesh(new THREE.OctahedronGeometry(.53,0),
-        new THREE.MeshBasicMaterial({color:kind==="orb"?0x71e8ff:0xffd87e,
-          transparent:true,opacity:.16,depthWrite:false}));
-      glow.position.y=1.25;g.add(glow);
-    }
-    return g;
   }
   private spawnWave(){
     if(!this.three||!this.world)return;
     for(const data of waveAt(this.spawnIndex++)){
-      const model=this.hazardModel(this.three,data.kind);
+      const model=createChaseHazard(this.three,data.kind);
       model.position.set(LANE_X[data.lane],0,data.z);
       this.world.add(model);this.hazards.push({obstacle:data,model});
     }
@@ -425,8 +290,8 @@ export class ChaseScene extends Phaser.Scene {
     const intro=Math.min(1,this.timeAlive/1.8);
     const ease=intro*intro*(3-2*intro);
     const camera=this.camera!;
-    camera.position.set(9*(1-ease),4.8+ease*.2,2.4+(12.6-2.4)*ease);
-    camera.lookAt(0,1,-7);
+    camera.position.set(8.2*(1-ease),4.8-.3*ease,2.4+8.2*ease);
+    camera.lookAt(0,1,-7.8);
     if(this.timeAlive>2.3&&!this.returning){
       const held=this.heldPhase||this.keys!.shift.isDown;
       if(!held)this.phaseLocked=false;
@@ -524,13 +389,10 @@ export class ChaseScene extends Phaser.Scene {
       }
       if(this.overlay)this.overlay.style.opacity=String(1-this.returningTime/.72);
     }
-    for(const mark of this.laneMarks){
-      mark.mesh.position.z+=24*dt;
-      if(mark.mesh.position.z>10)mark.mesh.position.z-=84;
-    }
-    for(const prop of this.graveProps){
-      prop.mesh.position.z+=24*dt;
-      if(prop.mesh.position.z>13)prop.mesh.position.z-=110;
+    if(this.environment)updateChaseEnvironment(this.environment,dt);
+    if(this.ghostHalo){
+      this.ghostHalo.rotation.z+=dt*.5;
+      this.ghostHalo.scale.setScalar(this.intangible?1.22:1);
     }
     if(this.hintElement){
       if(this.returning)this.hintElement.textContent="PORTAL ABERTO — VOLTANDO AO CEMITÉRIO 2D";
@@ -599,6 +461,7 @@ export class ChaseScene extends Phaser.Scene {
     if(this.world){
       this.disposeObject(this.world);
       this.world.clear();this.world=undefined;
+      this.environment=undefined;this.ghostHalo=undefined;
     }
     if(this.threeRenderer){
       this.threeRenderer.domElement.removeEventListener("webglcontextlost",this.onContextLost);
