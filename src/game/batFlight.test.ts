@@ -23,7 +23,7 @@ describe("special bat opportunity",()=>{
    expect(batCanCapture(BAT_CAPTURE_OFFSET_PX)).toBe(true);
    expect(batCanCapture(BAT_CAPTURE_OFFSET_PX+BAT_CAPTURE_TOLERANCE_PX)).toBe(true);
    expect(batCanCapture(BAT_CAPTURE_OFFSET_PX-BAT_CAPTURE_TOLERANCE_PX-1)).toBe(false);
-   expect(batAttempt(90,false)).toBe("early");
+   expect(batAttempt(BAT_CAPTURE_OFFSET_PX+BAT_CAPTURE_TOLERANCE_PX+5,false)).toBe("early");
    expect(batAttempt(BAT_CAPTURE_OFFSET_PX,false)).toBe("success");
    expect(batAttempt(BAT_CAPTURE_OFFSET_PX,true)).toBe("missed");
    expect(batHasLeft(BAT_MISS_OFFSET_PX-1)).toBe(true);
