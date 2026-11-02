@@ -12,6 +12,8 @@ import {ResultsScene,AchievementsScene} from "./scenes/ProgressScenes";
 import {ShopScene} from "./scenes/ShopScene";
 import {ChaseScene} from "./scenes/ChaseScene";
 import {ChaseFallbackScene} from "./scenes/ChaseFallbackScene";
+import {PlatformScene} from "./scenes/PlatformScene";
+import {PLATFORM_START_PX,shouldStartPlatform} from "./game/platformLevel";
 import {CHASE_START_PX,shouldStartChase,type RunSnapshot} from "./game/modes";
 import {reportMode} from "./game/diagnostics";
 import {activeAppearance} from "./shop/economy";
@@ -60,7 +62,15 @@ class MenuScene extends Phaser.Scene {
         .setOrigin(.5).setDepth(12).setInteractive({useHandCursor:true});
     const launch=(forceTutorial=false)=>{
       retroAudio.start();
-      if(new URLSearchParams(location.search).has("test_chase")){
+      if(new URLSearchParams(location.search).has("test_platform")){
+        // Direct QA access to the new platform chapter; normal gameplay
+        // still requires completing the 3D chase first.
+        this.scene.start("platform",{
+          distancePx:PLATFORM_START_PX,energy:100,
+          essence:0,jumps:0,phases:0,walls:0,orbs:0,
+          forceTutorial:false,chaseDone:true,platformDone:false
+        } satisfies RunSnapshot);
+      }else if(new URLSearchParams(location.search).has("test_chase")){
         // Local QA shortcut; real runs always trigger at 800m.
         this.scene.start("chase",{distancePx:CHASE_START_PX,energy:100,
           essence:0,jumps:0,phases:0,walls:0,orbs:0,
@@ -133,6 +143,7 @@ class GameScene extends Phaser.Scene {
   private score=0;
   private resumeData?:RunSnapshot;
   private chaseDone=false;
+  private platformDone=false;
   private transitioning=false;
   private spawnAt=FIRST_SEGMENT_START;
   private planner!: CoursePlanner;
@@ -157,7 +168,7 @@ class GameScene extends Phaser.Scene {
   create(){
     this.things=[];this.distance=0;this.speed=160;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.planner=new CoursePlanner(Date.now());
     this.elapsed=0;this.gesturePhaseHeld=false;this.lastRegion=-1;
-    this.chaseDone=false;this.transitioning=false;
+    this.chaseDone=false;this.platformDone=false;this.transitioning=false;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
@@ -168,6 +179,7 @@ class GameScene extends Phaser.Scene {
       this.jumps=run.jumps;this.phases=run.phases;
       this.walls=run.walls;this.orbs=run.orbs;
       this.chaseDone=run.chaseDone;
+      this.platformDone=run.platformDone===true;
       // A safe gap before the first obstacle on returning from the chase.
       this.spawnAt=this.distance+360;
       this.planner=new CoursePlanner(Date.now(),true);
@@ -277,13 +289,46 @@ class GameScene extends Phaser.Scene {
     const run:RunSnapshot={
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
-      forceTutorial:this.forceTutorial,chaseDone:true
+      forceTutorial:this.forceTutorial,chaseDone:true,
+      platformDone:this.platformDone
     };
     this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
       this.scene.start("chase",run);
     });
     this.cameras.main.fadeOut(550,30,26,65);
+  }
+  private checkPlatformTransition(){
+    if(this.transitioning||this.platformDone||!this.chaseDone||
+      this.distance<PLATFORM_START_PX)return;
+    const center=this.distance+PLAYER_X;
+    let nearest=Infinity;
+    for(const t of this.things){
+      if(t.kind==="essence"||t.kind==="orb")continue;
+      if(t.x+t.width>=center-45)
+        nearest=Math.min(nearest,t.x-center);
+    }
+    if(!shouldStartPlatform({
+      distancePx:this.distance,
+      chaseDone:this.chaseDone,
+      platformDone:this.platformDone,
+      grounded:this.motion==="grounded",
+      physical:this.material==="physical",
+      nearestHazardPx:nearest
+    }))return;
+    this.transitioning=true;
+    this.gesture.clear();
+    const run:RunSnapshot={
+      distancePx:this.distance,energy:this.ep,essence:this.score,
+      jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
+      forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false
+    };
+    this.tutorialBanner.setVisible(true)
+      .setText("UMA MANSÃO! O CAMINHO SEGUE POR DENTRO...");
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
+      this.scene.start("platform",run);
+    });
+    this.cameras.main.fadeOut(550,27,20,56);
   }
   private generate(){
     const segment=this.planner.next({
@@ -422,6 +467,7 @@ class GameScene extends Phaser.Scene {
     while(this.spawnAt<this.distance+W+240)this.generate();
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
     this.checkChaseTransition();
+    this.checkPlatformTransition();
   }
   private die(){
     if(!this.alive)return;
@@ -516,5 +562,5 @@ new Phaser.Game({
   type:Phaser.CANVAS,width:W,height:H,parent:"game",backgroundColor:"#171733",
   render:{pixelArt:true,antialias:false},
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene,ChaseFallbackScene]
+  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene,ChaseFallbackScene,PlatformScene]
 });
