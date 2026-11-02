@@ -410,7 +410,8 @@ export class ChaseScene extends Phaser.Scene {
         return false;
       });
       if(this.hunterPressure>=1){this.captured();return;}
-      if(chaseCompleted(this.run.distancePx,this.activeSeconds))this.beginReturn();
+      if(chaseCompleted(this.run.distancePx,this.activeSeconds,
+        this.run.specialChaseEndPx??CHASE_END_PX))this.beginReturn();
     }else{
       // Safety latch: a scene is never allowed to leave without a verified
       // completed chase, even if a stale callback flips returning.
@@ -430,7 +431,7 @@ export class ChaseScene extends Phaser.Scene {
         reportMode("chase-three","exit after "+
           this.activeSeconds.toFixed(1)+"s at "+
           Math.floor(this.run.distancePx/10)+"m");
-        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX,
+        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:this.run.specialChaseEndPx??CHASE_END_PX,
           hunterDanger:Math.round(this.hunterPressure*100)})});
         return;
       }
@@ -438,7 +439,7 @@ export class ChaseScene extends Phaser.Scene {
     }
     if(this.environment){
       const region=updateChaseEnvironment(
-        this.environment,dt,24,this.run.distancePx);
+        this.environment,dt,24,8000+(this.run.distancePx-this.initialDistance));
       if(region!==this.lastRegion){
         this.lastRegion=region;
         this.regionNoticeUntil=this.timeAlive+2.8;
@@ -472,7 +473,8 @@ export class ChaseScene extends Phaser.Scene {
   private beginReturn(){
     if(this.returning||this.ended)return;
     const wallSeconds=(Date.now()-this.readyAtWall)/1000;
-    if(!chaseCompleted(this.run.distancePx,this.activeSeconds) ||
+    if(!chaseCompleted(this.run.distancePx,this.activeSeconds,
+        this.run.specialChaseEndPx??CHASE_END_PX) ||
        wallSeconds<18){
       reportChaseError("premature completion rejected",
         "active="+this.activeSeconds.toFixed(2)+
@@ -487,7 +489,7 @@ export class ChaseScene extends Phaser.Scene {
     this.returning=true;this.gesture.clear();this.heldPhase=false;
     this.chaseFx?.emit("phase",
       this.ghost?.position.x??0,this.ghost?.position.y??1,PLAYER_Z,22);
-    this.run.distancePx=Math.max(this.run.distancePx,CHASE_END_PX);
+    this.run.distancePx=Math.max(this.run.distancePx,this.run.specialChaseEndPx??CHASE_END_PX);
     retroAudio.play("phaseOff");
   }
   private captured(){
