@@ -28,6 +28,9 @@ import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
 import {initFullscreen} from "./fullscreen";
+import {newSpecialSchedule,restoreSpecialSchedule,
+  scheduleSnapshot,nextSpecialEvent,specialEventReady,chaseEndFor,
+  type SpecialSchedule,type SpecialEvent} from "./game/specialEvents";
 import {ensureHunterHordeArt,PURSUER_TEXTURES,SOUL_PICKUP_TEXTURE,SOUL_FOLLOWER_TEXTURE}
   from "./art/hunterHordeArt";
 import {
@@ -154,6 +157,9 @@ class GameScene extends Phaser.Scene {
   private hunterNotice!:Phaser.GameObjects.Text;
   private hunterNoticeTime=0;
   private waveGraphics!:Phaser.GameObjects.Graphics;
+  private hunterGlow!:Phaser.GameObjects.Graphics;
+  private enemyHints!:Phaser.GameObjects.Graphics;
+  private hintLabels:Phaser.GameObjects.Text[]=[];
   private capturing=false;
   private pauseButton!: Phaser.GameObjects.Text;
   private musicButton!: Phaser.GameObjects.Text;
@@ -187,6 +193,8 @@ class GameScene extends Phaser.Scene {
   private chaseDone=false;
   private platformDone=false;
   private batDone=false;
+  private specialPlan:SpecialSchedule=newSpecialSchedule();
+  private scheduledMode:SpecialEvent|null=null;
   private batNextAtPx=BAT_TRIGGER_PX;
   private batWorldX:number|null=null;
   private batArt?:Phaser.GameObjects.Image;
@@ -226,6 +234,8 @@ class GameScene extends Phaser.Scene {
     this.chaseDone=false;this.platformDone=false;this.batDone=false;
     this.batWorldX=null;this.batNextAtPx=BAT_TRIGGER_PX;
     this.batMessageTime=0;this.transitioning=false;
+    this.specialPlan=newSpecialSchedule(Date.now());
+    this.scheduledMode=null;
     this.capturing=false;this.hunterState=initialHunterState();
     this.nextSoulAt=SOUL_FIRST_AT_PX;this.soulPickups=[];
     this.soulFollowers=[];this.hunterNoticeTime=0;
@@ -241,6 +251,12 @@ class GameScene extends Phaser.Scene {
       this.chaseDone=run.chaseDone;
       this.platformDone=run.platformDone===true;
       this.batDone=run.batDone===true;
+      this.specialPlan=restoreSpecialSchedule(run,this.distance,Date.now());
+      if(new URLSearchParams(location.search).has("test_bat")){
+        this.scheduledMode="bat";
+        this.batDone=false;
+        this.batNextAtPx=BAT_TRIGGER_PX;
+      }
       this.hunterState=initialHunterState(run.hunterDanger,run.soulCompanions);
       this.nextSoulAt=this.distance+SOUL_FIRST_AT_PX;
       // A safe gap before the first obstacle on returning from the chase.
@@ -261,8 +277,16 @@ class GameScene extends Phaser.Scene {
     this.speedLines=this.add.graphics().setDepth(1);
     this.phantom=this.add.image(PLAYER_X,this.y+16,
       appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
+    this.hunterGlow=this.add.graphics().setDepth(4);
     this.hunterSprite=this.add.image(hunterScreenX(this.hunterState.danger),
-      GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setDepth(5);
+      GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setScale(1.48).setDepth(5);
+    this.enemyHints=this.add.graphics().setDepth(7);
+    this.hintLabels=Array.from({length:4},()=>
+      this.add.text(-120,-120,"",{
+        fontFamily:"monospace",fontSize:"10px",color:"#ffffff",
+        backgroundColor:"#4f2b70",padding:{x:5,y:3},
+        stroke:"#16162f",strokeThickness:1
+      }).setOrigin(.5,1).setDepth(9).setVisible(false));
     this.soulFollowers=Array.from({length:MAX_SOUL_COMPANIONS},()=>
       this.add.image(-20,GROUND-12,SOUL_FOLLOWER_TEXTURE)
         .setScale(.64).setDepth(5).setVisible(false));
@@ -280,10 +304,11 @@ class GameScene extends Phaser.Scene {
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
-    this.add.graphics().setDepth(18).fillStyle(0x201939,.9)
-      .fillRoundedRect(5,46,182,30,4);
-    this.hunterHud=this.add.text(10,48,"",{
-      fontFamily:"monospace",fontSize:"9px",color:"#fff0ee",
+    this.add.graphics().setDepth(18).fillStyle(0x201939,.95)
+      .fillRoundedRect(4,46,214,39,5)
+      .lineStyle(1,0xff9995,.8).strokeRoundedRect(4,46,214,39,5);
+    this.hunterHud=this.add.text(10,49,"",{
+      fontFamily:"monospace",fontSize:"12px",color:"#fff0ee",
       stroke:"#1d142b",strokeThickness:2
     }).setDepth(21);
     this.hunterBar=this.add.graphics().setDepth(21);
@@ -291,12 +316,17 @@ class GameScene extends Phaser.Scene {
       fontFamily:"monospace",fontSize:"10px",color:"#f9efff",
       backgroundColor:"#4e375e",padding:{x:6,y:4},align:"center"
     }).setOrigin(.5,0).setDepth(26).setVisible(false);
-    this.waveButton=this.add.text(424,206,"ONDA [Q]",{
-      fontFamily:"monospace",fontSize:"9px",color:"#e5ffff",
-      backgroundColor:"#33506d",padding:{x:5,y:5}
+    this.waveButton=this.add.text(413,194,"✦ ONDA 0/3",{
+      fontFamily:"monospace",fontSize:"12px",color:"#edfeff",
+      backgroundColor:"#304b6b",padding:{x:10,y:10}
     }).setOrigin(.5).setDepth(27).setInteractive({useHandCursor:true});
-    this.waveButton.on("pointerdown",()=>this.triggerSpectralWave());
-    this.waveButton.setVisible(false);
+    this.waveButton.setStroke("#172437",3);
+    this.waveButton.on("pointerdown",()=>{
+      this.triggerSpectralWave();
+      if(!canActivateSpectralWave(this.hunterState))
+        this.showHunterNotice("RESGATE 3 ALMAS PARA LIBERAR A ONDA",1.3);
+    });
+    this.waveButton.setVisible(true);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
     this.tutorialBanner=this.add.text(W/2,109,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
     this.updateTutorial(PLAYER_X);
@@ -379,8 +409,32 @@ class GameScene extends Phaser.Scene {
       progressStore.markTutorial();
     }else this.tutorialBanner.setText(hint.text).setVisible(true);
   }
+  private maybeScheduleEvent(){
+    if(this.transitioning||!this.alive||this.scheduledMode!==null||
+      this.batWorldX!==null)return;
+    if(this.distance<this.specialPlan.nextAtPx)return;
+    let nearest=Infinity;
+    const center=this.distance+PLAYER_X;
+    for(const t of this.things){
+      if(t.collected||t.kind==="orb"||t.kind==="essence")continue;
+      if(t.x+t.width>=center-45)
+        nearest=Math.min(nearest,t.x-center);
+    }
+    if(!specialEventReady(
+      this.distance,this.specialPlan.nextAtPx,
+      this.motion==="grounded",this.material==="physical",nearest))return;
+    const picked=nextSpecialEvent(this.specialPlan,this.distance);
+    this.specialPlan=picked.schedule;
+    this.scheduledMode=picked.mode;
+    document.documentElement.dataset.phantomSpecialEvent=picked.mode;
+    document.documentElement.dataset.phantomSpecialCount=String(this.specialPlan.events);
+    if(picked.mode==="bat"){
+      this.batDone=false;
+      this.batNextAtPx=this.distance;
+    }
+  }
   private checkChaseTransition(){
-    if(this.transitioning||this.chaseDone||this.distance<CHASE_START_PX)return;
+    if(this.transitioning||this.scheduledMode!=="chase")return;
     const center=this.distance+PLAYER_X;
     let nearest=Infinity;
     for(const t of this.things){
@@ -389,14 +443,15 @@ class GameScene extends Phaser.Scene {
       if(t.x+t.width>=center-45)nearest=Math.min(nearest,distance);
     }
     if(!shouldStartChase({
-      distancePx:this.distance,
+      distancePx:Math.max(this.distance,CHASE_START_PX),
       grounded:this.motion==="grounded",
       physical:this.material==="physical",
-      chaseDone:this.chaseDone,
+      chaseDone:false,
       nearestHazardPx:nearest
     }))return;
     reportMode("chase-loading","trigger "+Math.floor(this.distance/10)+"m");
     this.transitioning=true;
+    this.scheduledMode=null;
     this.chaseDone=true;
     this.gesture.clear();
     const run:RunSnapshot={
@@ -405,7 +460,9 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial,chaseDone:true,
       platformDone:this.platformDone,batDone:this.batDone,
       hunterDanger:this.hunterState.danger,
-      soulCompanions:this.hunterState.companions
+      soulCompanions:this.hunterState.companions,
+      specialChaseEndPx:chaseEndFor(this.distance),
+      ...scheduleSnapshot(this.specialPlan)
     };
     this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -414,8 +471,7 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.fadeOut(550,30,26,65);
   }
   private checkPlatformTransition(){
-    if(this.transitioning||this.platformDone||!this.chaseDone||
-      this.distance<PLATFORM_START_PX)return;
+    if(this.transitioning||this.scheduledMode!=="platform")return;
     const center=this.distance+PLAYER_X;
     let nearest=Infinity;
     for(const t of this.things){
@@ -424,14 +480,15 @@ class GameScene extends Phaser.Scene {
         nearest=Math.min(nearest,t.x-center);
     }
     if(!shouldStartPlatform({
-      distancePx:this.distance,
-      chaseDone:this.chaseDone,
-      platformDone:this.platformDone,
+      distancePx:Math.max(this.distance,PLATFORM_START_PX),
+      chaseDone:true,
+      platformDone:false,
       grounded:this.motion==="grounded",
       physical:this.material==="physical",
       nearestHazardPx:nearest
     }))return;
     this.transitioning=true;
+    this.scheduledMode=null;
     this.gesture.clear();
     const run:RunSnapshot={
       distancePx:this.distance,energy:this.ep,essence:this.score,
@@ -439,7 +496,8 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false,
       batDone:this.batDone,
       hunterDanger:this.hunterState.danger,
-      soulCompanions:this.hunterState.companions
+      soulCompanions:this.hunterState.companions,
+      ...scheduleSnapshot(this.specialPlan)
     };
     this.tutorialBanner.setVisible(true)
       .setText("UMA MANSÃO! O CAMINHO SEGUE POR DENTRO...");
@@ -478,7 +536,8 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial,chaseDone:true,
       platformDone:this.platformDone,batDone:true,
       hunterDanger:this.hunterState.danger,
-      soulCompanions:this.hunterState.companions
+      soulCompanions:this.hunterState.companions,
+      ...scheduleSnapshot(this.specialPlan)
     };
     reportMode("bat-captured","at "+Math.floor(this.distance/10)+"m");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -488,7 +547,9 @@ class GameScene extends Phaser.Scene {
     return true;
   }
   private updateBatOpportunity(dt:number){
-    if(this.transitioning||this.batDone)return;
+    if(this.transitioning)return;
+    if(this.batWorldX===null&&this.scheduledMode!=="bat"&&
+       !new URLSearchParams(location.search).has("test_bat"))return;
     if(this.batMessageTime>0)this.batMessageTime=Math.max(0,this.batMessageTime-dt);
     if(this.batWorldX!==null){
       if(batHasLeft(this.batRelative())){
@@ -498,6 +559,7 @@ class GameScene extends Phaser.Scene {
         this.batPrompt?.setText("MORCEGO ESCAPOU! OUTRA CHANCE MAIS ADIANTE.")
           .setVisible(true);
         this.batNextAtPx=nextBatDistance(this.distance);
+        this.scheduledMode=null;
         document.documentElement.dataset.phantomBatStatus="missed";
       }
       return;
@@ -510,8 +572,8 @@ class GameScene extends Phaser.Scene {
       if(t.x+t.width>=center-45)nearest=Math.min(nearest,t.x-center);
     }
     if(!shouldSpawnBat({
-      distancePx:this.distance,platformDone:this.platformDone,
-      batDone:this.batDone,grounded:this.motion==="grounded",
+      distancePx:this.distance,platformDone:true,
+      batDone:false,grounded:this.motion==="grounded",
       physical:this.material==="physical",nearestHazardPx:nearest
     },this.batNextAtPx))return;
     // Cinematic safe pocket: remove future physical hazards from the brief
@@ -525,6 +587,7 @@ class GameScene extends Phaser.Scene {
       return true;
     });
     this.batWorldX=center+BAT_SPAWN_AHEAD_PX;
+    this.scheduledMode=null;
     this.batMessageTime=0;
     document.documentElement.dataset.phantomBatStatus="approaching";
     this.batArt?.setVisible(true);
@@ -632,11 +695,52 @@ class GameScene extends Phaser.Scene {
       }
     }
   }
+  private drawEnemyClues(){
+    this.enemyHints.clear();
+    let used=0;
+    for(const t of this.things){
+      if(t.collected||used>=this.hintLabels.length)continue;
+      const x=t.x-this.distance;
+      if(x<PLAYER_X+70||x>W-8)continue;
+      let label:string|undefined,color=0x9f75d6;
+      let y=GROUND-45;
+      if(t.kind==="gap"){label="PULAR";color=0xffba80;y=GROUND-12;}
+      else if(t.kind==="wall"){label="FASE";color=0x96e4f6;y=GROUND-73;}
+      else if(t.kind==="bat"||t.kind==="hunter"||t.kind==="spikes"){
+        label="FASE";color=0xff9aa8;
+        y=t.kind==="spikes"?GROUND-27:t.kind==="bat"?GROUND-51:GROUND-69;
+      }else if(t.kind==="ward"||t.kind==="wraith"){
+        label="FÍSICO";color=0xe7baff;
+        y=t.kind==="ward"?GROUND-55:GROUND-58;
+      }
+      if(!label)continue;
+      const spot=this.hintLabels[used++];
+      const screenX=Math.max(25,Math.min(W-28,x+t.width/2));
+      const py=Math.max(99,y+Math.sin(this.elapsed*4+used)*2);
+      spot.setText(label)
+        .setPosition(screenX,py).setVisible(true);
+      this.enemyHints.lineStyle(2,color,.84)
+        .lineBetween(screenX,py+4,screenX,py+11);
+      this.enemyHints.fillStyle(color,.8)
+        .fillTriangle(screenX-3,py+11,screenX+3,py+11,screenX,py+17);
+    }
+    for(let i=used;i<this.hintLabels.length;i++)
+      this.hintLabels[i].setVisible(false);
+  }
   private drawHunterAndSouls():void{
+    const hunterX=hunterScreenX(this.hunterState.danger);
     this.hunterSprite.setTexture(PURSUER_TEXTURES[Math.floor(this.elapsed*7)%2])
-      .setPosition(hunterScreenX(this.hunterState.danger),
-        GROUND+Math.sin(this.elapsed*12)*1.4)
+      .setPosition(hunterX,GROUND+Math.sin(this.elapsed*12)*1.4)
       .setTint(this.hunterState.danger>=80?0xff9eaf:0xffffff);
+    this.hunterGlow.clear()
+      .fillStyle(this.hunterState.danger>=75?0xff647e:0xffd48b,
+        .12+.09*Math.sin(this.elapsed*9))
+      .fillCircle(hunterX+22,GROUND-35,26)
+      .lineStyle(2,this.hunterState.danger>=75?0xff7887:0xf7ddab,.53)
+      .strokeCircle(hunterX+21,GROUND-30,14);
+    this.hunterGlow.lineStyle(1,0xffc488,.44)
+      .lineBetween(hunterX+23,GROUND-31,
+        Math.min(PLAYER_X-10,hunterX+38),GROUND-34);
     for(let i=0;i<this.soulFollowers.length;i++){
       const sprite=this.soulFollowers[i];
       const visible=i<this.hunterState.companions;
@@ -665,18 +769,30 @@ class GameScene extends Phaser.Scene {
         .strokeCircle(PLAYER_X,this.y+16,radius+10);
     }
     this.hunterHud.setText("CAÇADOR "+Math.ceil(this.hunterState.danger)+
-      "/100   ALMAS "+this.hunterState.companions);
+      "/100  ALMAS "+this.hunterState.companions+"/5");
     this.hunterBar.clear()
-      .fillStyle(0x26213f).fillRect(10,64,170,7)
-      .fillStyle(this.hunterState.danger>=75?0xff7d8d:
+      .fillStyle(0x26213f).fillRect(10,69,199,10)
+      .fillStyle(this.hunterState.danger>=75?0xff6379:
         this.hunterState.danger>=45?0xffc277:0x8bd8f3)
-      .fillRect(12,66,Math.round(166*this.hunterState.danger/100),3);
-    this.waveButton.setVisible(canActivateSpectralWave(this.hunterState));
+      .fillRect(12,71,Math.round(195*this.hunterState.danger/100),6);
+    const ready=canActivateSpectralWave(this.hunterState);
+    this.waveButton.setVisible(true)
+      .setText(this.hunterState.waveSeconds>0?"✦ ONDA ATIVA":
+        ready?"✦ ONDA PRONTA!":"✦ ONDA "+this.hunterState.companions+"/3")
+      .setBackgroundColor(ready?"#277d91":"#304b6b")
+      .setAlpha(ready?1:.82)
+      .setScale(ready?1+.045*Math.sin(this.elapsed*8):1);
     if(this.hunterNoticeTime<=0)this.hunterNotice.setVisible(false);
     document.documentElement.dataset.phantomHunterDanger=
       String(Math.ceil(this.hunterState.danger));
     document.documentElement.dataset.phantomSoulCompanions=
       String(this.hunterState.companions);
+    document.documentElement.dataset.phantomHunterX=
+      this.hunterSprite.x.toFixed(1);
+    document.documentElement.dataset.phantomWaveState=
+      this.hunterState.waveSeconds>0?"active":
+      canActivateSpectralWave(this.hunterState)?"ready":
+      this.hunterState.companions+"/3";
     document.documentElement.dataset.phantomWaveActive=
       String(this.hunterState.waveSeconds>0);
   }
@@ -854,6 +970,7 @@ class GameScene extends Phaser.Scene {
     while(this.spawnAt<this.distance+W+240)this.generate();
     this.maybeSpawnSoul();
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
+    this.maybeScheduleEvent();
     this.checkChaseTransition();
     this.checkPlatformTransition();
     this.updateBatOpportunity(dt);
@@ -929,6 +1046,7 @@ class GameScene extends Phaser.Scene {
     }
     this.drawBat();
     this.drawHunterAndSouls();
+    this.drawEnemyClues();
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";

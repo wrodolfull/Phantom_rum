@@ -175,7 +175,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
     if(this.finished){
       this.returnClock+=delta;
       if(this.returnClock>.85){
-        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX,energy:this.energy,
+        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:this.run.specialChaseEndPx??CHASE_END_PX,energy:this.energy,
           hunterDanger:Math.round(this.pressure*100)})});
         return;
       }
@@ -239,7 +239,8 @@ export class ChaseFallbackScene extends Phaser.Scene {
       }
       this.waves=this.waves.filter(w=>w.object.z<=CHASE_DESPAWN_Z);
       if(this.pressure>=1){this.capture();return;}
-      if(chaseCompleted(this.run.distancePx,this.activeSeconds)){
+      if(chaseCompleted(this.run.distancePx,this.activeSeconds,
+        this.run.specialChaseEndPx??CHASE_END_PX)){
         this.finished=true;this.gesture.clear();this.hint.setText("PORTAL — VOLTANDO AO 2D");
       }
     }
