@@ -24,7 +24,7 @@ export class BatFlightScene extends Phaser.Scene{
   private activeSeconds=0;
   private elapsed=0;
   private lane:FlightLane=1;
-  private y=BAT_FLIGHT_LANES[1];
+  private y:number=BAT_FLIGHT_LANES[1];
   private earned=0;
   private collected=new Set<number>();
   private flying!:Phaser.GameObjects.Image;
