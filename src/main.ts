@@ -28,6 +28,9 @@ import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
 import {initFullscreen} from "./fullscreen";
+import {newSpecialSchedule,restoreSpecialSchedule,
+  scheduleSnapshot,nextSpecialEvent,specialEventReady,chaseEndFor,
+  type SpecialSchedule,type SpecialEvent} from "./game/specialEvents";
 import {ensureHunterHordeArt,PURSUER_TEXTURES,SOUL_PICKUP_TEXTURE,SOUL_FOLLOWER_TEXTURE}
   from "./art/hunterHordeArt";
 import {
@@ -187,6 +190,8 @@ class GameScene extends Phaser.Scene {
   private chaseDone=false;
   private platformDone=false;
   private batDone=false;
+  private specialPlan:SpecialSchedule=newSpecialSchedule();
+  private scheduledMode:SpecialEvent|null=null;
   private batNextAtPx=BAT_TRIGGER_PX;
   private batWorldX:number|null=null;
   private batArt?:Phaser.GameObjects.Image;
@@ -226,6 +231,8 @@ class GameScene extends Phaser.Scene {
     this.chaseDone=false;this.platformDone=false;this.batDone=false;
     this.batWorldX=null;this.batNextAtPx=BAT_TRIGGER_PX;
     this.batMessageTime=0;this.transitioning=false;
+    this.specialPlan=newSpecialSchedule(Date.now());
+    this.scheduledMode=null;
     this.capturing=false;this.hunterState=initialHunterState();
     this.nextSoulAt=SOUL_FIRST_AT_PX;this.soulPickups=[];
     this.soulFollowers=[];this.hunterNoticeTime=0;
@@ -241,6 +248,12 @@ class GameScene extends Phaser.Scene {
       this.chaseDone=run.chaseDone;
       this.platformDone=run.platformDone===true;
       this.batDone=run.batDone===true;
+      this.specialPlan=restoreSpecialSchedule(run,this.distance,Date.now());
+      if(new URLSearchParams(location.search).has("test_bat")){
+        this.scheduledMode="bat";
+        this.batDone=false;
+        this.batNextAtPx=BAT_TRIGGER_PX;
+      }
       this.hunterState=initialHunterState(run.hunterDanger,run.soulCompanions);
       this.nextSoulAt=this.distance+SOUL_FIRST_AT_PX;
       // A safe gap before the first obstacle on returning from the chase.
@@ -379,8 +392,32 @@ class GameScene extends Phaser.Scene {
       progressStore.markTutorial();
     }else this.tutorialBanner.setText(hint.text).setVisible(true);
   }
+  private maybeScheduleEvent(){
+    if(this.transitioning||!this.alive||this.scheduledMode!==null||
+      this.batWorldX!==null)return;
+    if(this.distance<this.specialPlan.nextAtPx)return;
+    let nearest=Infinity;
+    const center=this.distance+PLAYER_X;
+    for(const t of this.things){
+      if(t.collected||t.kind==="orb"||t.kind==="essence")continue;
+      if(t.x+t.width>=center-45)
+        nearest=Math.min(nearest,t.x-center);
+    }
+    if(!specialEventReady(
+      this.distance,this.specialPlan.nextAtPx,
+      this.motion==="grounded",this.material==="physical",nearest))return;
+    const picked=nextSpecialEvent(this.specialPlan,this.distance);
+    this.specialPlan=picked.schedule;
+    this.scheduledMode=picked.mode;
+    document.documentElement.dataset.phantomSpecialEvent=picked.mode;
+    document.documentElement.dataset.phantomSpecialCount=String(this.specialPlan.events);
+    if(picked.mode==="bat"){
+      this.batDone=false;
+      this.batNextAtPx=this.distance;
+    }
+  }
   private checkChaseTransition(){
-    if(this.transitioning||this.chaseDone||this.distance<CHASE_START_PX)return;
+    if(this.transitioning||this.scheduledMode!=="chase")return;
     const center=this.distance+PLAYER_X;
     let nearest=Infinity;
     for(const t of this.things){
@@ -389,14 +426,15 @@ class GameScene extends Phaser.Scene {
       if(t.x+t.width>=center-45)nearest=Math.min(nearest,distance);
     }
     if(!shouldStartChase({
-      distancePx:this.distance,
+      distancePx:Math.max(this.distance,CHASE_START_PX),
       grounded:this.motion==="grounded",
       physical:this.material==="physical",
-      chaseDone:this.chaseDone,
+      chaseDone:false,
       nearestHazardPx:nearest
     }))return;
     reportMode("chase-loading","trigger "+Math.floor(this.distance/10)+"m");
     this.transitioning=true;
+    this.scheduledMode=null;
     this.chaseDone=true;
     this.gesture.clear();
     const run:RunSnapshot={
@@ -405,7 +443,9 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial,chaseDone:true,
       platformDone:this.platformDone,batDone:this.batDone,
       hunterDanger:this.hunterState.danger,
-      soulCompanions:this.hunterState.companions
+      soulCompanions:this.hunterState.companions,
+      specialChaseEndPx:chaseEndFor(this.distance),
+      ...scheduleSnapshot(this.specialPlan)
     };
     this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -414,8 +454,7 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.fadeOut(550,30,26,65);
   }
   private checkPlatformTransition(){
-    if(this.transitioning||this.platformDone||!this.chaseDone||
-      this.distance<PLATFORM_START_PX)return;
+    if(this.transitioning||this.scheduledMode!=="platform")return;
     const center=this.distance+PLAYER_X;
     let nearest=Infinity;
     for(const t of this.things){
@@ -424,14 +463,15 @@ class GameScene extends Phaser.Scene {
         nearest=Math.min(nearest,t.x-center);
     }
     if(!shouldStartPlatform({
-      distancePx:this.distance,
-      chaseDone:this.chaseDone,
-      platformDone:this.platformDone,
+      distancePx:Math.max(this.distance,PLATFORM_START_PX),
+      chaseDone:true,
+      platformDone:false,
       grounded:this.motion==="grounded",
       physical:this.material==="physical",
       nearestHazardPx:nearest
     }))return;
     this.transitioning=true;
+    this.scheduledMode=null;
     this.gesture.clear();
     const run:RunSnapshot={
       distancePx:this.distance,energy:this.ep,essence:this.score,
@@ -439,7 +479,8 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false,
       batDone:this.batDone,
       hunterDanger:this.hunterState.danger,
-      soulCompanions:this.hunterState.companions
+      soulCompanions:this.hunterState.companions,
+      ...scheduleSnapshot(this.specialPlan)
     };
     this.tutorialBanner.setVisible(true)
       .setText("UMA MANSÃO! O CAMINHO SEGUE POR DENTRO...");
@@ -478,7 +519,8 @@ class GameScene extends Phaser.Scene {
       forceTutorial:this.forceTutorial,chaseDone:true,
       platformDone:this.platformDone,batDone:true,
       hunterDanger:this.hunterState.danger,
-      soulCompanions:this.hunterState.companions
+      soulCompanions:this.hunterState.companions,
+      ...scheduleSnapshot(this.specialPlan)
     };
     reportMode("bat-captured","at "+Math.floor(this.distance/10)+"m");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -488,7 +530,9 @@ class GameScene extends Phaser.Scene {
     return true;
   }
   private updateBatOpportunity(dt:number){
-    if(this.transitioning||this.batDone)return;
+    if(this.transitioning)return;
+    if(this.batWorldX===null&&this.scheduledMode!=="bat"&&
+       !new URLSearchParams(location.search).has("test_bat"))return;
     if(this.batMessageTime>0)this.batMessageTime=Math.max(0,this.batMessageTime-dt);
     if(this.batWorldX!==null){
       if(batHasLeft(this.batRelative())){
@@ -498,6 +542,7 @@ class GameScene extends Phaser.Scene {
         this.batPrompt?.setText("MORCEGO ESCAPOU! OUTRA CHANCE MAIS ADIANTE.")
           .setVisible(true);
         this.batNextAtPx=nextBatDistance(this.distance);
+        this.scheduledMode=null;
         document.documentElement.dataset.phantomBatStatus="missed";
       }
       return;
@@ -510,8 +555,8 @@ class GameScene extends Phaser.Scene {
       if(t.x+t.width>=center-45)nearest=Math.min(nearest,t.x-center);
     }
     if(!shouldSpawnBat({
-      distancePx:this.distance,platformDone:this.platformDone,
-      batDone:this.batDone,grounded:this.motion==="grounded",
+      distancePx:this.distance,platformDone:true,
+      batDone:false,grounded:this.motion==="grounded",
       physical:this.material==="physical",nearestHazardPx:nearest
     },this.batNextAtPx))return;
     // Cinematic safe pocket: remove future physical hazards from the brief
@@ -525,6 +570,7 @@ class GameScene extends Phaser.Scene {
       return true;
     });
     this.batWorldX=center+BAT_SPAWN_AHEAD_PX;
+    this.scheduledMode=null;
     this.batMessageTime=0;
     document.documentElement.dataset.phantomBatStatus="approaching";
     this.batArt?.setVisible(true);
@@ -854,6 +900,7 @@ class GameScene extends Phaser.Scene {
     while(this.spawnAt<this.distance+W+240)this.generate();
     this.maybeSpawnSoul();
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
+    this.maybeScheduleEvent();
     this.checkChaseTransition();
     this.checkPlatformTransition();
     this.updateBatOpportunity(dt);
