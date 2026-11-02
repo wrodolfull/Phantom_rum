@@ -2,8 +2,8 @@
  * Minimal on-device diagnostics for an intermittent scene transition bug.
  * Nothing is sent to a server. Use ?debug_chase=1 to show detailed states.
  */
-export const PHANTOM_BUILD="0.12.0-vfx-20261102";
-export type Mode="menu"|"runner"|"chase-loading"|"chase-three"|"chase-compat"|"results";
+export const PHANTOM_BUILD="0.13.0-platform-20261102";
+export type Mode="menu"|"runner"|"chase-loading"|"chase-three"|"chase-compat"|"platform"|"results";
 const logs:string[]=[];
 const enabled=new URLSearchParams(location.search).has("debug_chase");
 const timestamp=()=>new Date().toLocaleTimeString("pt-BR",{hour12:false});

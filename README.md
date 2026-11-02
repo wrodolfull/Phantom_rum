@@ -158,3 +158,15 @@ Após o deploy: `?test_chase=1&v=0110` com a marca `BUILD 0.11.0-regions-2026110
 - Critérios e checklist em [docs/3d-vfx-polish.md](docs/3d-vfx-polish.md).
 
 Versão da página após merge: `BUILD 0.12.0-vfx-20261102`.
+
+## Terceiro modo — Mansão das Almas (PR #16)
+O Phantom Run agora alterna entre corrida lateral 2D, perseguição low-poly 3D (800–1300 metros) e uma **fase de plataforma 2D aos ~1450 m**. A troca acontece no trecho seguro seguinte, sem perder o progresso.
+
+- Ao entrar na mansão, o movimento passa a ser livre (não há corrida automática). Use esquerda/direita, pule entre plataformas e procure a saída.
+- Controles desktop: A/D ou setas para mover; Espaço/↑ para pular; Shift para fase; Esc para pausar.
+- Controles mobile sem botões grandes: **arraste o polegar na metade esquerda para mover; toque ou segure na metade direita para pular ou ficar intangível**. Multitoque funciona.
+- Corredor em pixel art com 8 suportes, uma runa que exige forma física, um portão que exige intangibilidade, **8 Essências**, **2 orbes** e dois checkpoints.
+- A sala conserva EP, Essência, contadores e cosméticos. Ao escapar, o runner retoma com uma recompensa de **70 metros** e a mansão não se repete na mesma partida.
+- A entrada usa um gatilho seguro, e uma queda devolve ao último checkpoint sem obrigar o jogador a reiniciar a corrida.
+- Acesse diretamente a mansão com `?test_platform=1&v=0130`.
+- Guia e critérios de aceite: [docs/platform-chapter.md](docs/platform-chapter.md).
