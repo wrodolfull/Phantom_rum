@@ -541,6 +541,147 @@ class GameScene extends Phaser.Scene {
       .setText(ready?"AGORA! TOQUE NO MORCEGO OU APERTE E":
         "MORCEGO RARO! O CÍRCULO ESTÁ DIMINUINDO...");
   }
+  private showHunterNotice(message:string,seconds=1.5){
+    this.hunterNotice.setText(message).setVisible(true);
+    this.hunterNoticeTime=seconds;
+  }
+  private sufferHunterHit(kind:HunterHitKind):void{
+    const result=hunterHit(this.hunterState,kind);
+    if(!result.hit)return;
+    this.hunterState=result.state;
+    this.particles.burst("hit",PLAYER_X,this.y+15,18);
+    retroAudio.play("hit");
+    this.cameras.main.shake(100,.006);
+    if(result.protectedBySoul)
+      this.showHunterNotice("UMA ALMA PROTEGEU PHANTOM! +"+result.amount+" PERIGO");
+    else this.showHunterNotice("O CAÇADOR SE APROXIMA! +"+result.amount+" PERIGO");
+    if(result.caught)this.die();
+  }
+  private rescueFromPit():void{
+    // Falling is another mistake, NOT a one-hit kill. Recover on safe ground
+    // beyond the pit and award the same brief protection as a normal impact.
+    const center=this.distance+PLAYER_X;
+    const pit=this.things.find(t=>t.kind==="gap"&&
+      t.x<=center+65&&t.x+t.width>=center-90);
+    const safeCenter=pit?pit.x+pit.width+48:center+140;
+    this.distance=Math.max(this.distance,safeCenter-PLAYER_X);
+    this.y=GROUND-25;this.vy=0;this.motion="grounded";
+    this.material="physical";this.gesture.clear();this.gesturePhaseHeld=false;
+    this.jumpQueued=0;this.coyote=.12;
+    this.sufferHunterHit("pit");
+  }
+  private maybeSpawnSoul():void{
+    // Spawn only inside the currently planned path; use the same safe-space
+    // check as the segment generator to keep pickups away from hazards.
+    let attempts=0;
+    while(this.nextSoulAt<this.distance+W+350&&
+      this.nextSoulAt<this.spawnAt-100&&attempts++<3){
+      const at=safeSoulLocation(this.nextSoulAt,this.things);
+      this.nextSoulAt=at+SOUL_SPAWN_SPACING_PX;
+      const sprite=this.add.image(at,GROUND-20,SOUL_PICKUP_TEXTURE)
+        .setDepth(5).setScale(.85);
+      this.soulPickups.push({x:at,collected:false,sprite});
+    }
+  }
+  private collectNearbySouls(previousX:number,currentX:number):void{
+    for(const soul of this.soulPickups){
+      if(soul.collected)continue;
+      if(!soulPickupReached(previousX,currentX,soul.x,
+        this.motion==="grounded",this.material==="physical"))continue;
+      soul.collected=true;
+      soul.sprite.setVisible(false);
+      const wasFull=this.hunterState.companions>=MAX_SOUL_COMPANIONS;
+      this.hunterState=rescueSoul(this.hunterState);
+      this.particles.burst("collect",PLAYER_X+8,GROUND-20,12);
+      retroAudio.play("collect");
+      this.showHunterNotice(wasFull?"ALMA RESGATADA! PERIGO -5":
+        "ALMA RESGATADA! ELA SEGUE VOCÊ!");
+    }
+    this.soulPickups=this.soulPickups.filter(soul=>{
+      if(soul.collected||soul.x<this.distance-70){
+        soul.sprite.destroy();return false;
+      }
+      return true;
+    });
+  }
+  private triggerSpectralWave():void{
+    if(!this.alive||this.paused||this.transitioning||
+      !canActivateSpectralWave(this.hunterState))return;
+    this.hunterState=activateSpectralWave(this.hunterState);
+    this.showHunterNotice("ONDA ESPECTRAL! ABRINDO CAMINHO",2);
+    this.particles.burst("phaseOn",PLAYER_X,GROUND-34,25);
+    retroAudio.play("phaseOn");
+    // The wave clears physical threats within sight but never pits,
+    // spectral wards, collectibles or the progression transition.
+    for(const t of this.things){
+      const ahead=t.x-this.distance-PLAYER_X;
+      if(!t.collected&&waveBreaksObstacle(t.kind)&&ahead>=-22&&ahead<340){
+        t.collected=true;t.sprite?.setVisible(false);
+      }
+    }
+  }
+  private drawHunterAndSouls():void{
+    this.hunterSprite.setTexture(PURSUER_TEXTURES[Math.floor(this.elapsed*7)%2])
+      .setPosition(hunterScreenX(this.hunterState.danger),
+        GROUND+Math.sin(this.elapsed*12)*1.4)
+      .setTint(this.hunterState.danger>=80?0xff9eaf:0xffffff);
+    for(let i=0;i<this.soulFollowers.length;i++){
+      const sprite=this.soulFollowers[i];
+      const visible=i<this.hunterState.companions;
+      sprite.setVisible(visible);
+      if(!visible)continue;
+      const targetX=PLAYER_X-20-i*12;
+      const targetY=this.y+15-9-(i%2)*12;
+      sprite.setPosition(targetX,
+        targetY+Math.sin(this.elapsed*6+i*.8)*2);
+      sprite.setAlpha(this.hunterState.waveSeconds>0?.9:1);
+    }
+    for(const soul of this.soulPickups){
+      if(soul.collected)continue;
+      const x=soul.x-this.distance;
+      soul.sprite.setPosition(Math.round(x),
+        GROUND-22+Math.sin(this.elapsed*4+soul.x*.01)*3);
+      soul.sprite.setVisible(x>-30&&x<W+30);
+    }
+    this.waveGraphics.clear();
+    if(this.hunterState.waveSeconds>0){
+      const phase=this.elapsed*6;
+      const radius=22+Math.sin(phase)*4;
+      this.waveGraphics.lineStyle(2,0x8dedff,.78)
+        .strokeCircle(PLAYER_X,this.y+16,radius);
+      this.waveGraphics.lineStyle(1,0xc7afff,.43)
+        .strokeCircle(PLAYER_X,this.y+16,radius+10);
+    }
+    this.hunterHud.setText("CAÇADOR "+Math.ceil(this.hunterState.danger)+
+      "/100   ALMAS "+this.hunterState.companions);
+    this.hunterBar.clear()
+      .fillStyle(0x26213f).fillRect(10,64,170,7)
+      .fillStyle(this.hunterState.danger>=75?0xff7d8d:
+        this.hunterState.danger>=45?0xffc277:0x8bd8f3)
+      .fillRect(12,66,Math.round(166*this.hunterState.danger/100),3);
+    this.waveButton.setVisible(canActivateSpectralWave(this.hunterState));
+    if(this.hunterNoticeTime<=0)this.hunterNotice.setVisible(false);
+    document.documentElement.dataset.phantomHunterDanger=
+      String(Math.ceil(this.hunterState.danger));
+    document.documentElement.dataset.phantomSoulCompanions=
+      String(this.hunterState.companions);
+    document.documentElement.dataset.phantomWaveActive=
+      String(this.hunterState.waveSeconds>0);
+  }
+  private onHunterQADown=(event:KeyboardEvent)=>{
+    if(!new URLSearchParams(location.search).has("test_hunter")||
+      !this.sys.isActive()||event.repeat||!this.alive||this.paused)return;
+    if(event.code==="KeyH"){
+      event.preventDefault();
+      // QA only: simulate separated collisions without waiting for i-frames.
+      this.hunterState={...this.hunterState,invulnerable:0};
+      this.sufferHunterHit("obstacle");
+    }else if(event.code==="KeyJ"){
+      event.preventDefault();
+      this.hunterState=rescueSoul(this.hunterState);
+      this.showHunterNotice("ALMA RESGATADA (TESTE)");
+    }
+  };
   private generate(){
     const segment=this.planner.next({
       start:this.spawnAt,
