@@ -210,6 +210,8 @@ class GameScene extends Phaser.Scene {
   private spawnAt=FIRST_SEGMENT_START;
   private planner!: CoursePlanner;
   private tierLabel!: Phaser.GameObjects.Text;
+  private eventHud!:Phaser.GameObjects.Text;
+  private eventHudLast="";
   private tutorialBanner!: Phaser.GameObjects.Text;
   private tutorialEnabled=false;
   private forceTutorial=false;
@@ -246,6 +248,7 @@ class GameScene extends Phaser.Scene {
     this.waveElapsed=0;this.waveShatters=0;this.waveShards=[];
     this.soulFollowers=[];this.hunterNoticeTime=0;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
+    this.eventHudLast="";
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
     if(this.resumeData){
@@ -336,6 +339,10 @@ class GameScene extends Phaser.Scene {
     });
     this.waveButton.setVisible(true);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
+    this.eventHud=this.add.text(W-9,79,"",{
+      fontFamily:"monospace",fontSize:"9px",color:"#ffe6b8",
+      backgroundColor:"#292444",padding:{x:6,y:4}
+    }).setOrigin(1,0).setDepth(21);
     this.tutorialBanner=this.add.text(W/2,109,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
     this.updateTutorial(PLAYER_X);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
@@ -1100,6 +1107,18 @@ class GameScene extends Phaser.Scene {
     this.drawBat();
     this.drawHunterAndSouls();
     this.drawEnemyClues();
+    const nextMeters=Math.max(0,
+      Math.ceil((this.specialPlan.nextAtPx-this.distance)/10));
+    const label=this.scheduledMode!==null||
+      this.transitioning||this.batWorldX!==null?
+        "ANOMALIA NO CAMINHO!":
+        nextMeters>0?"PRÓXIMO MODO EM "+nextMeters+"m":"PRÓXIMO MODO PRONTO";
+    if(label!==this.eventHudLast){
+      this.eventHud.setText(label);
+      this.eventHudLast=label;
+    }
+    this.eventHud.setVisible(!this.hunterNotice.visible&&!this.batPrompt?.visible);
+    document.documentElement.dataset.phantomNextSpecialMeters=String(nextMeters);
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
