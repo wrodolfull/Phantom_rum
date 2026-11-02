@@ -170,3 +170,15 @@ O Phantom Run agora alterna entre corrida lateral 2D, perseguição low-poly 3D 
 - A entrada usa um gatilho seguro, e uma queda devolve ao último checkpoint sem obrigar o jogador a reiniciar a corrida.
 - Acesse diretamente a mansão com `?test_platform=1&v=0130`.
 - Guia e critérios de aceite: [docs/platform-chapter.md](docs/platform-chapter.md).
+
+## Incorporação de morcego e fase de voo (PR #17)
+Depois de concluir a mansão, aos ~1700m, surge um morcego luminoso especial com um círculo que diminui conforme se aproxima.
+- Acerte a janela verde: **E** no PC ou toque diretamente no morcego no celular.
+- Phantom incorpora o morcego e voa por ~10 segundos, mudando entre três alturas para coletar Essência.
+- O voo concede **até 10 Essências extras e 135m**, sem risco de Game Over. No final Phantom desincorpora, cai suavemente e volta ao runner 2D.
+- Se perder a captura, outra oportunidade pode aparecer cerca de 650m depois. Uma incorporação bem-sucedida por corrida.
+- A partida mantém EP, cosméticos, pontos, estatísticas e a conclusão da perseguição 3D e da mansão; não há recompensa duplicada.
+- QA do encontro: `?test_bat=1&v=0140`; QA do voo: `?test_flight=1&v=0140`.
+- Manual em [docs/bat-possession-flight.md](docs/bat-possession-flight.md).
+
+Versão de verificação: `BUILD 0.14.0-batflight-20261102`.
