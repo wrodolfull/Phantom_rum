@@ -215,6 +215,8 @@ class GameScene extends Phaser.Scene {
       data?.resume?.platformDone===true);
     document.documentElement.dataset.phantomBatDone=String(
       data?.resume?.batDone===true);
+    document.documentElement.dataset.phantomHunterDanger=String(
+      Math.ceil(data?.resume?.hunterDanger??16));
     reportMode("runner",data?.resume
       ?"returned at "+Math.floor(data.resume.distancePx/10)+"m":"fresh run");
   }
@@ -399,7 +401,9 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,
-      platformDone:this.platformDone,batDone:this.batDone
+      platformDone:this.platformDone,batDone:this.batDone,
+      hunterDanger:this.hunterState.danger,
+      soulCompanions:this.hunterState.companions
     };
     this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -431,7 +435,9 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false,
-      batDone:this.batDone
+      batDone:this.batDone,
+      hunterDanger:this.hunterState.danger,
+      soulCompanions:this.hunterState.companions
     };
     this.tutorialBanner.setVisible(true)
       .setText("UMA MANSÃO! O CAMINHO SEGUE POR DENTRO...");
@@ -468,7 +474,9 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,
-      platformDone:this.platformDone,batDone:true
+      platformDone:this.platformDone,batDone:true,
+      hunterDanger:this.hunterState.danger,
+      soulCompanions:this.hunterState.companions
     };
     reportMode("bat-captured","at "+Math.floor(this.distance/10)+"m");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -844,11 +852,23 @@ class GameScene extends Phaser.Scene {
   }
   private die(){
     if(!this.alive)return;
-    this.alive=false;
+    this.alive=false;this.capturing=true;
     this.material="physical";
-    this.particles.burst("hit",PLAYER_X,this.y+15,24);
+    this.gesture.clear();this.holdIntangible=false;
+    this.hunterState={...this.hunterState,danger:100,invulnerable:0,waveSeconds:0};
+    this.hunterSprite.setDepth(12);
+    this.showHunterNotice("100/100 — O CAÇADOR PEGOU PHANTOM!",3);
+    this.particles.burst("hit",PLAYER_X,this.y+15,28);
     retroAudio.stop();
     retroAudio.play("hit");
+    // A short visible catch animation makes the 100/100 threshold legible.
+    this.tweens.add({targets:this.hunterSprite,x:PLAYER_X-7,
+      duration:550,ease:"Sine.easeIn"});
+    this.time.delayedCall(720,()=>this.finishCapturedRun());
+  }
+  private finishCapturedRun(){
+    if(!this.capturing)return;
+    this.capturing=false;
     const stats:RunStats={
       meters:Math.floor(this.distance/10),essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
