@@ -58,6 +58,28 @@ export function asRunStats(state:RunSnapshot) {
 }
 export type ChaseObstacleKind="stone"|"arch"|"ward"|"essence"|"orb";
 export interface ChaseObject {lane:0|1|2;kind:ChaseObstacleKind; z:number; passed:boolean}
+/**
+ * Hazard life cycle in chase mode:
+ * 1. Approach player
+ * 2. Resolve crossing only once
+ * 3. CONTINUE moving behind the player and camera
+ * 4. Despawn past camera; never freeze at the collision plane.
+ */
+export const CHASE_HAZARD_SPEED=24;
+export const CHASE_IMPACT_Z=1.5;
+export const CHASE_DESPAWN_Z=11;
+export function advanceChaseHazard(
+  object:ChaseObject,deltaSeconds:number
+):{crossed:boolean;despawn:boolean}{
+  const before=object.z;
+  const elapsed=Number.isFinite(deltaSeconds)?
+    Math.max(0,deltaSeconds):0;
+  object.z+=CHASE_HAZARD_SPEED*elapsed;
+  const crossed=!object.passed&&before<CHASE_IMPACT_Z&&
+    object.z>=CHASE_IMPACT_Z;
+  if(crossed)object.passed=true;
+  return {crossed,despawn:object.z>CHASE_DESPAWN_Z};
+}
 export function chaseCollision(
   obstacle:ChaseObject, playerLane:0|1|2, playerHeight:number,
   intangible:boolean
