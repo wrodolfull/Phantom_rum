@@ -13,6 +13,13 @@ import {ShopScene} from "./scenes/ShopScene";
 import {ChaseScene} from "./scenes/ChaseScene";
 import {ChaseFallbackScene} from "./scenes/ChaseFallbackScene";
 import {PlatformScene} from "./scenes/PlatformScene";
+import {BatFlightScene} from "./scenes/BatFlightScene";
+import {ensureBatArt,BAT_SPECIAL_KEY} from "./art/batArt";
+import {
+  BAT_TRIGGER_PX,BAT_SPAWN_AHEAD_PX,BAT_PLAYER_X,
+  batRelativeX,batTargetRadius,batCanCapture,batAttempt,batHasLeft,
+  shouldSpawnBat,nextBatDistance
+} from "./game/batFlight";
 import {PLATFORM_START_PX,shouldStartPlatform} from "./game/platformLevel";
 import {CHASE_START_PX,shouldStartChase,type RunSnapshot} from "./game/modes";
 import {reportMode} from "./game/diagnostics";
@@ -62,7 +69,19 @@ class MenuScene extends Phaser.Scene {
         .setOrigin(.5).setDepth(12).setInteractive({useHandCursor:true});
     const launch=(forceTutorial=false)=>{
       retroAudio.start();
-      if(new URLSearchParams(location.search).has("test_platform")){
+      if(new URLSearchParams(location.search).has("test_flight")){
+        this.scene.start("bat-flight",{
+          distancePx:BAT_TRIGGER_PX,energy:100,
+          essence:0,jumps:0,phases:0,walls:0,orbs:0,
+          forceTutorial:false,chaseDone:true,platformDone:true,batDone:true
+        } satisfies RunSnapshot);
+      }else if(new URLSearchParams(location.search).has("test_bat")){
+        this.scene.start("game",{resume:{
+          distancePx:BAT_TRIGGER_PX,energy:100,
+          essence:0,jumps:0,phases:0,walls:0,orbs:0,
+          forceTutorial:false,chaseDone:true,platformDone:true,batDone:false
+        } satisfies RunSnapshot});
+      }else if(new URLSearchParams(location.search).has("test_platform")){
         // Direct QA access to the new platform chapter; normal gameplay
         // still requires completing the 3D chase first.
         this.scene.start("platform",{
@@ -144,6 +163,13 @@ class GameScene extends Phaser.Scene {
   private resumeData?:RunSnapshot;
   private chaseDone=false;
   private platformDone=false;
+  private batDone=false;
+  private batNextAtPx=BAT_TRIGGER_PX;
+  private batWorldX:number|null=null;
+  private batArt?:Phaser.GameObjects.Image;
+  private batRing?:Phaser.GameObjects.Graphics;
+  private batPrompt?:Phaser.GameObjects.Text;
+  private batMessageTime=0;
   private transitioning=false;
   private spawnAt=FIRST_SEGMENT_START;
   private planner!: CoursePlanner;
@@ -164,13 +190,17 @@ class GameScene extends Phaser.Scene {
     this.forceTutorial=data?.resume?.forceTutorial??(data?.forceTutorial===true);
     document.documentElement.dataset.phantomPlatformDone=String(
       data?.resume?.platformDone===true);
+    document.documentElement.dataset.phantomBatDone=String(
+      data?.resume?.batDone===true);
     reportMode("runner",data?.resume
       ?"returned at "+Math.floor(data.resume.distancePx/10)+"m":"fresh run");
   }
   create(){
     this.things=[];this.distance=0;this.speed=160;this.ep=100;this.y=GROUND-25;this.vy=0;this.motion="grounded";this.material="physical";this.alive=true;this.paused=false;this.jumpQueued=0;this.coyote=.1;this.holdIntangible=false;this.needsRelease=false;this.score=0;this.spawnAt=FIRST_SEGMENT_START;this.acc=0;this.planner=new CoursePlanner(Date.now());
     this.elapsed=0;this.gesturePhaseHeld=false;this.lastRegion=-1;
-    this.chaseDone=false;this.platformDone=false;this.transitioning=false;
+    this.chaseDone=false;this.platformDone=false;this.batDone=false;
+    this.batWorldX=null;this.batNextAtPx=BAT_TRIGGER_PX;
+    this.batMessageTime=0;this.transitioning=false;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
@@ -182,6 +212,7 @@ class GameScene extends Phaser.Scene {
       this.walls=run.walls;this.orbs=run.orbs;
       this.chaseDone=run.chaseDone;
       this.platformDone=run.platformDone===true;
+      this.batDone=run.batDone===true;
       // A safe gap before the first obstacle on returning from the chase.
       this.spawnAt=this.distance+360;
       this.planner=new CoursePlanner(Date.now(),true);
@@ -193,12 +224,21 @@ class GameScene extends Phaser.Scene {
     const look=activeAppearance(progressStore.load());
     this.heroId=look.hero;this.accessoryId=look.accessory;
     ensureAppearanceVisuals(this,this.heroId,this.accessoryId);
+    ensureBatArt(this);
     this.groundTiles=this.add.tileSprite(0, 211, W, H-211, "ground").setOrigin(0,0).setDepth(2);
     this.world=this.add.graphics().setDepth(3);
     this.speedLines=this.add.graphics().setDepth(1);
     this.phantom=this.add.image(PLAYER_X,this.y+16,
       appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
     this.particles=new PhantomEffects(this);
+    this.batRing=this.add.graphics().setDepth(10);
+    this.batArt=this.add.image(0,GROUND-87,BAT_SPECIAL_KEY)
+      .setDepth(11).setVisible(false);
+    this.batPrompt=this.add.text(W/2,80,"",{
+      fontFamily:"monospace",fontSize:"10px",color:"#fff4cb",
+      backgroundColor:"#3a2c5b",padding:{x:7,y:4},
+      stroke:"#171633",strokeThickness:2
+    }).setOrigin(.5,0).setDepth(26).setVisible(false);
     this.add.graphics().setDepth(18).fillStyle(0x1c1a40, .93).fillRoundedRect(5, 4, 320, 40, 5)
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
@@ -229,8 +269,10 @@ class GameScene extends Phaser.Scene {
     const onVisibility=()=>{if(document.hidden)pauseForBackground();};
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("blur",pauseForBackground);
+    window.addEventListener("keydown",this.onBatKeyDown);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
       this.gesture.clear();
+      window.removeEventListener("keydown",this.onBatKeyDown);
       document.removeEventListener("visibilitychange",onVisibility);
       window.removeEventListener("blur",pauseForBackground);
     });
@@ -243,7 +285,16 @@ class GameScene extends Phaser.Scene {
     this.input.addPointer(3);
     this.input.on("pointerdown",(p:Phaser.Input.Pointer,over:Phaser.GameObjects.GameObject[])=>{
       // HUD actions and the small top region are not jump/phase gestures.
-      if(!this.alive||this.paused||p.y<44||over.length>0)return;
+      if(!this.alive||this.paused||this.transitioning||
+        p.y<44||over.length>0)return;
+      if(this.batWorldX!==null){
+        const bx=this.batWorldX-this.distance;
+        const by=GROUND-87+Math.sin(this.elapsed*8)*3;
+        if(Math.hypot(p.x-bx,p.y-by)<=43){
+          this.tryCaptureBat();
+          return; // tapping the special bat never triggers an accidental jump
+        }
+      }
       this.gesture.press(p.id,p.x,p.y,performance.now());
     });
     this.input.on("pointermove",(p:Phaser.Input.Pointer)=>{
@@ -292,7 +343,7 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,
-      platformDone:this.platformDone
+      platformDone:this.platformDone,batDone:this.batDone
     };
     this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -323,7 +374,8 @@ class GameScene extends Phaser.Scene {
     const run:RunSnapshot={
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
-      forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false
+      forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false,
+      batDone:this.batDone
     };
     this.tutorialBanner.setVisible(true)
       .setText("UMA MANSÃO! O CAMINHO SEGUE POR DENTRO...");
@@ -331,6 +383,109 @@ class GameScene extends Phaser.Scene {
       this.scene.start("platform",run);
     });
     this.cameras.main.fadeOut(550,27,20,56);
+  }
+  private onBatKeyDown=(event:KeyboardEvent)=>{
+    if(event.code==="KeyE"&&!event.repeat&&this.sys.isActive()&&
+      this.alive&&!this.paused&&!this.transitioning){
+      if(this.tryCaptureBat())event.preventDefault();
+    }
+  };
+  private batRelative():number{
+    return this.batWorldX===null?Infinity:
+      batRelativeX(this.distance,this.batWorldX,PLAYER_X);
+  }
+  private tryCaptureBat():boolean{
+    if(this.batWorldX===null||this.batDone)return false;
+    const relative=this.batRelative();
+    if(batAttempt(relative,this.batDone)!=="success")return false;
+    this.batDone=true;
+    this.transitioning=true;
+    this.batWorldX=null;
+    this.batArt?.setVisible(false);
+    this.batRing?.clear();
+    this.gesture.clear();
+    this.gesturePhaseHeld=false;
+    this.particles.burst("phaseOn",PLAYER_X,GROUND-48,26);
+    retroAudio.play("phaseOn");
+    this.batPrompt?.setText("INCORPORAÇÃO PERFEITA!").setVisible(true);
+    const run:RunSnapshot={
+      distancePx:this.distance,energy:this.ep,essence:this.score,
+      jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
+      forceTutorial:this.forceTutorial,chaseDone:true,
+      platformDone:this.platformDone,batDone:true
+    };
+    reportMode("bat-captured","at "+Math.floor(this.distance/10)+"m");
+    this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
+      this.scene.start("bat-flight",run);
+    });
+    this.cameras.main.fadeOut(460,98,76,133);
+    return true;
+  }
+  private updateBatOpportunity(dt:number){
+    if(this.transitioning||this.batDone)return;
+    if(this.batMessageTime>0)this.batMessageTime=Math.max(0,this.batMessageTime-dt);
+    if(this.batWorldX!==null){
+      if(batHasLeft(this.batRelative())){
+        this.batWorldX=null;this.batArt?.setVisible(false);
+        this.batRing?.clear();
+        this.batMessageTime=1.7;
+        this.batPrompt?.setText("MORCEGO ESCAPOU! OUTRA CHANCE MAIS ADIANTE.")
+          .setVisible(true);
+        this.batNextAtPx=nextBatDistance(this.distance);
+        document.documentElement.dataset.phantomBatStatus="missed";
+      }
+      return;
+    }
+    if(this.distance<this.batNextAtPx)return;
+    const center=this.distance+PLAYER_X;
+    let nearest=Infinity;
+    for(const t of this.things){
+      if(t.collected||t.kind==="orb"||t.kind==="essence")continue;
+      if(t.x+t.width>=center-45)nearest=Math.min(nearest,t.x-center);
+    }
+    if(!shouldSpawnBat({
+      distancePx:this.distance,platformDone:this.platformDone,
+      batDone:this.batDone,grounded:this.motion==="grounded",
+      physical:this.material==="physical",nearestHazardPx:nearest
+    },this.batNextAtPx))return;
+    // Cinematic safe pocket: remove future physical hazards from the brief
+    // capture corridor; collectibles remain and the course resumes after it.
+    this.things=this.things.filter(t=>{
+      if(t.kind==="essence"||t.kind==="orb")return true;
+      const x=t.x-center;
+      if(x>=65&&x<=BAT_SPAWN_AHEAD_PX+85){
+        t.sprite?.destroy();return false;
+      }
+      return true;
+    });
+    this.batWorldX=center+BAT_SPAWN_AHEAD_PX;
+    this.batMessageTime=0;
+    document.documentElement.dataset.phantomBatStatus="approaching";
+    this.batArt?.setVisible(true);
+    this.batPrompt?.setText("MORCEGO RARO! CÍRCULO MENOR = HORA DE TOCAR")
+      .setVisible(true);
+  }
+  private drawBat(){
+    this.batRing?.clear();
+    if(this.batWorldX===null){
+      if(!this.transitioning&&this.batMessageTime<=0)this.batPrompt?.setVisible(false);
+      return;
+    }
+    const relative=this.batRelative(),x=this.batWorldX-this.distance;
+    const y=GROUND-87+Math.sin(this.elapsed*8)*3;
+    const ready=batCanCapture(relative);
+    document.documentElement.dataset.phantomBatStatus=ready?"ready":"approaching";
+    document.documentElement.dataset.phantomBatRelative=relative.toFixed(1);
+    this.batArt?.setVisible(true).setPosition(x,y)
+      .setScale(1.03,1+.1*Math.sin(this.elapsed*16));
+    const radius=batTargetRadius(relative);
+    const color=ready?0x7dffd8:0xffdb8f;
+    const alpha=.72+.18*Math.sin(this.elapsed*13);
+    this.batRing?.lineStyle(2,color,alpha).strokeCircle(x,y,radius);
+    this.batRing?.lineStyle(1,0xe9faff,.4).strokeCircle(x,y,radius+5);
+    this.batPrompt?.setVisible(relative<310)
+      .setText(ready?"AGORA! TOQUE NO MORCEGO OU APERTE E":
+        "MORCEGO RARO! O CÍRCULO ESTÁ DIMINUINDO...");
   }
   private generate(){
     const segment=this.planner.next({
@@ -428,7 +583,10 @@ class GameScene extends Phaser.Scene {
     const prevX=this.distance+PLAYER_X;
     this.vy+=GRAVITY*dt;
     this.y+=this.vy*dt;
-    this.speed=difficulty(this.distance).speed;
+    // Brief cinematic slowdown makes the precise capture window fair
+    // on a touchscreen without changing hitboxes or chase/platform timing.
+    this.speed=difficulty(this.distance).speed*
+      (this.batWorldX===null?1:.76);
     const dx=this.speed*dt;
     this.distance+=dx;
     const px=this.distance+PLAYER_X;
@@ -470,6 +628,7 @@ class GameScene extends Phaser.Scene {
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
     this.checkChaseTransition();
     this.checkPlatformTransition();
+    this.updateBatOpportunity(dt);
   }
   private die(){
     if(!this.alive)return;
@@ -527,6 +686,7 @@ class GameScene extends Phaser.Scene {
           t.sprite.setY(GROUND-14+Math.round(-5+8*Math.sin(this.elapsed*4+t.x*.014)));
       }
     }
+    this.drawBat();
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
@@ -539,6 +699,7 @@ class GameScene extends Phaser.Scene {
         .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
     }else this.phantom.setTexture(
       appearanceTexture(this.heroId,this.accessoryId,false,"hurt")).setAlpha(1).setScale(1);
+    document.documentElement.dataset.phantomRunnerMeters=String(Math.floor(this.distance/10));
     const hudText="PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score;
     if(hudText!==this.lastHud){this.hud.setText(hudText);this.lastHud=hudText;}
     const currentTier=difficulty(this.distance).tier;
@@ -564,5 +725,5 @@ new Phaser.Game({
   type:Phaser.CANVAS,width:W,height:H,parent:"game",backgroundColor:"#171733",
   render:{pixelArt:true,antialias:false},
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
-  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene,ChaseFallbackScene,PlatformScene]
+  scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene,ChaseFallbackScene,PlatformScene,BatFlightScene]
 });
