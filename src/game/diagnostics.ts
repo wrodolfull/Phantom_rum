@@ -2,7 +2,7 @@
  * Minimal on-device diagnostics for an intermittent scene transition bug.
  * Nothing is sent to a server. Use ?debug_chase=1 to show detailed states.
  */
-export const PHANTOM_BUILD="0.16.0-hunter-20261102";
+export const PHANTOM_BUILD="0.17.0-mobile-events-20261102";
 export type Mode="menu"|"runner"|"chase-loading"|"chase-three"|"chase-compat"|"platform"|"bat-captured"|"bat-flight"|"bat-landing"|"results";
 const logs:string[]=[];
 const enabled=new URLSearchParams(location.search).has("debug_chase");
