@@ -2,6 +2,7 @@ import type * as T from "three";
 import type {AccessoryId,HeroId} from "../shop/catalog";
 import {heroById} from "../shop/catalog";
 import type {ChaseObstacleKind} from "../game/modes";
+import {CHASE_REGIONS,chaseRegionIndex,type RegionIndex} from "./chaseRegions";
 
 /**
  * Phantom Run 3D art direction: Spooky Arcade.
@@ -23,7 +24,7 @@ export const SPOOKY={
   essence:0xffd46b
 } as const;
 
-export type MovingArt={mesh:T.Object3D;z:number;span:number};
+export type MovingArt={mesh:T.Object3D;z:number;span:number;styles?:T.Group[]};
 export type GhostArt={
   model:T.Group;
   bodyMaterial:T.MeshStandardMaterial;
@@ -36,6 +37,14 @@ export type ChaseEnvironment={
   laneMarks:MovingArt[];
   moon:T.Object3D;
   mist:T.Object3D;
+  region:RegionIndex;
+  elapsed:number;
+  sky:T.Color;
+  fogColor:T.Color;
+  moonLight:T.DirectionalLight;
+  rimLight:T.DirectionalLight;
+  tileMaterials:T.MeshStandardMaterial[];
+  regionColors:{sky:T.Color;fog:T.Color;stone:T.Color;accent:T.Color;moonlight:T.Color}[];
 };
 type ThreeApi=typeof import("three");
 
@@ -139,6 +148,123 @@ function sideProp(THREE:ThreeApi,index:number):T.Group{
   return createStone(THREE,index);
 }
 
+function createTwistedTree(THREE:ThreeApi,variant:number):T.Group {
+  const group=new THREE.Group();
+  const wood=standard(THREE,0x33374f);
+  const leaves=standard(THREE,variant%2?0x426b70:0x326167);
+  const segments=[
+    {x:0,y:1.03,angle:.18},
+    {x:.32,y:2.22,angle:-.48},
+    {x:-.16,y:3.14,angle:.28}
+  ];
+  for(let i=0;i<segments.length;i++){
+    const p=segments[i];
+    const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.12-i*.035,.28-i*.06,2.06-i*.3,6),wood);
+    trunk.position.set(p.x,p.y,0);
+    trunk.rotation.z=p.angle;
+    group.add(trunk);
+  }
+  for(const dir of [-1,1]){
+    const limb=new THREE.Mesh(new THREE.CylinderGeometry(.055,.11,2.2,5),wood);
+    limb.position.set(dir*.92,3.01,.05);
+    limb.rotation.z=dir*.95;group.add(limb);
+    const tuft=new THREE.Mesh(new THREE.IcosahedronGeometry(.72,0),leaves);
+    tuft.scale.set(1.1,.68,.75);
+    tuft.position.set(dir*1.68,3.57,-.12);group.add(tuft);
+  }
+  return group;
+}
+function createMoonlitWillow(THREE:ThreeApi,variant:number):T.Group{
+  const group=new THREE.Group();
+  const wood=standard(THREE,0x40465d);
+  const leaf=standard(THREE,variant%2?0x38736c:0x4b8077);
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.19,.32,2.5,7),wood);
+  trunk.position.y=1.2;trunk.rotation.z=.16;group.add(trunk);
+  const canopy=new THREE.Mesh(new THREE.IcosahedronGeometry(1.53,0),leaf);
+  canopy.position.set(.36,3.03,0);
+  canopy.scale.set(1.35,.64,1.04);group.add(canopy);
+  for(let i=0;i<5;i++){
+    const vine=new THREE.Mesh(new THREE.ConeGeometry(.22,1.35+(i%2)*.4,5),leaf);
+    vine.position.set(-.9+i*.51,2.13-(i%2)*.24,.04*(i%3));
+    vine.rotation.z=Math.sin(i+variant)*.15;
+    group.add(vine);
+  }
+  return group;
+}
+function createRunePillar(THREE:ThreeApi,variant:number):T.Group{
+  const group=new THREE.Group();
+  const slate=standard(THREE,0x777493);
+  const inset=basic(THREE,0xcdb2ff,.95);
+  const base=createBox(THREE,.96,.26,.91,slate);
+  base.position.y=.13;group.add(base);
+  const shaft=new THREE.Mesh(new THREE.CylinderGeometry(.29,.41,2.75,5),slate);
+  shaft.position.y=1.57;group.add(shaft);
+  const crown=new THREE.Mesh(new THREE.ConeGeometry(.56,.68,5),slate);
+  crown.position.y=3.24;group.add(crown);
+  for(let i=0;i<3;i++){
+    const rune=new THREE.Mesh(new THREE.TorusGeometry(.14,.032,4,7),inset);
+    rune.position.set(.08,1.07+i*.57,.4);
+    rune.rotation.z=i*.7+variant*.12;group.add(rune);
+  }
+  return group;
+}
+function createBrokenGate(THREE:ThreeApi,variant:number):T.Group{
+  const g=new THREE.Group();
+  const stone=standard(THREE,variant%2?0x70728c:0x636480);
+  for(const side of [-1,1]){
+    const col=createBox(THREE,.47,2.2,.68,stone);
+    col.position.set(side*1.18,1.1,0);
+    col.rotation.z=side*(.07+(variant%3)*.04);g.add(col);
+    const cap=createBox(THREE,.63,.2,.84,stone);
+    cap.position.set(side*1.18,2.3,0);g.add(cap);
+  }
+  const fracture=createBox(THREE,1.4,.36,.7,stone);
+  fracture.position.set(-.51,2.56,0);fracture.rotation.z=-.19;g.add(fracture);
+  return g;
+}
+function createLostLanternCluster(THREE:ThreeApi,variant:number):T.Group{
+  const g=new THREE.Group();
+  const base=standard(THREE,0x3f5263);
+  const light=basic(THREE,variant%2?0x88f3df:0xb6bfff,.85);
+  for(let i=0;i<3;i++){
+    const x=(i-1)*.57;
+    const mushroom=new THREE.Mesh(new THREE.CylinderGeometry(.04,.075,.49+(i%2)*.21,5),base);
+    mushroom.position.set(x,.27+(i%2)*.1,.1);g.add(mushroom);
+    const cap=new THREE.Mesh(new THREE.SphereGeometry(.21+(i%2)*.065,7,5),light);
+    cap.position.set(x,.55+(i%2)*.2,.1);cap.scale.y=.5;g.add(cap);
+  }
+  return g;
+}
+function createMemorial(THREE:ThreeApi,variant:number):T.Group{
+  const g=new THREE.Group();
+  const stone=standard(THREE,0x8c829d);
+  const base=createBox(THREE,1.65,.24,1.2,stone);
+  base.position.y=.12;g.add(base);
+  const plinth=createBox(THREE,.95,.54,.84,stone);
+  plinth.position.y=.5;g.add(plinth);
+  const memorial=new THREE.Mesh(new THREE.CylinderGeometry(.23,.31,1.83,6),stone);
+  memorial.position.y=1.66;g.add(memorial);
+  const top=new THREE.Mesh(new THREE.IcosahedronGeometry(.43,0),
+    standard(THREE,variant%2?0xc6abbf:0xaec1d6));
+  top.position.y=2.66;g.add(top);
+  return g;
+}
+function createRegionProp(THREE:ThreeApi,index:number,region:RegionIndex):T.Group{
+  if(region===0)return sideProp(THREE,index);
+  if(region===1){
+    if(index%6===0)return createMoonlitWillow(THREE,index);
+    if(index%5===0)return createTwistedTree(THREE,index);
+    if(index%4===0)return createLostLanternCluster(THREE,index);
+    if(index%3===0)return createLantern(THREE);
+    return createCypress(THREE,index);
+  }
+  if(index%7===0)return createMausoleum(THREE);
+  if(index%5===0)return createBrokenGate(THREE,index);
+  if(index%4===0)return createRunePillar(THREE,index);
+  if(index%3===0)return createMemorial(THREE,index);
+  return createStone(THREE,index);
+}
+
 /**
  * Add stylized atmospheric depth, moon and moving masonry. The paving only
  * changes appearance; collision lanes stay at [-2.4, 0, 2.4].
@@ -152,6 +278,11 @@ export function createChaseEnvironment(THREE:ThreeApi,world:T.Scene):ChaseEnviro
   moonlight.position.set(-9,18,-25);world.add(moonlight);
   const rimlight=new THREE.DirectionalLight(0x6bd8ef,1.1);
   rimlight.position.set(7,8,10);world.add(rimlight);
+  const regionColors=CHASE_REGIONS.map(region=>({
+    sky:new THREE.Color(region.sky),fog:new THREE.Color(region.fog),
+    stone:new THREE.Color(region.stone),accent:new THREE.Color(region.accent),
+    moonlight:new THREE.Color(region.moonlight)
+  }));
 
   const moon=new THREE.Group();
   const face=new THREE.Mesh(new THREE.SphereGeometry(4.5,20,13),
@@ -230,12 +361,19 @@ export function createChaseEnvironment(THREE:ThreeApi,world:T.Scene):ChaseEnviro
   for(const side of [-1,1]){
     for(let i=0;i<13;i++){
       const variant=i+(side===-1?3:9);
-      const model=sideProp(THREE,variant);
+      // Three designs per prop are built once; only one is visible. When
+      // the prop wraps behind the camera, switch its design to the new region.
+      // This avoids scene replacement/pop-in right at the region threshold.
+      const model=new THREE.Group();
+      const styles=([0,1,2] as RegionIndex[]).map(region=>{
+        const group=createRegionProp(THREE,variant,region);
+        group.visible=region===0;model.add(group);return group;
+      });
       const z=-i*8.6-(side+1)*3.5;
       model.position.set(side*(5.1+(i%3)*1.12),0,z);
       model.rotation.y=(i%5)*.3;
       world.add(model);
-      scenery.push({mesh:model,z,span:111.8});
+      scenery.push({mesh:model,z,span:111.8,styles});
     }
   }
   // Low, thin fog strip near the horizon, without postprocessing.
@@ -245,7 +383,13 @@ export function createChaseEnvironment(THREE:ThreeApi,world:T.Scene):ChaseEnviro
       depthWrite:false,side:THREE.DoubleSide
     }));
   mist.position.set(0,3,-64);world.add(mist);
-  return {scenery,paving,laneMarks,moon,mist};
+  return {scenery,paving,laneMarks,moon,mist,
+    region:0,elapsed:0,
+    sky:world.background as T.Color,
+    fogColor:(world.fog as T.FogExp2).color,
+    moonLight:moonlight,rimLight:rimlight,
+    tileMaterials,regionColors
+  };
 }
 
 /** Geometry shared by purchased ghost skins; cosmetic equipment stays intact. */
@@ -409,10 +553,29 @@ export function createChaseHazard(THREE:ThreeApi,kind:ChaseObstacleKind):T.Group
   return group;
 }
 /** Recycles decorative meshes only. Never touches hazard/collision logic. */
-export function updateChaseEnvironment(art:ChaseEnvironment,dt:number,speed=24):void{
+export function updateChaseEnvironment(
+  art:ChaseEnvironment,dt:number,speed=24,distancePx=8000
+):RegionIndex{
+  const elapsed=Number.isFinite(dt)?Math.max(0,dt):0;
+  art.elapsed+=elapsed;
+  art.region=chaseRegionIndex(distancePx);
+  const palette=art.regionColors[art.region];
+  const blend=Math.min(1,elapsed*1.6);
+  art.sky.lerp(palette.sky,blend);
+  art.fogColor.lerp(palette.fog,blend);
+  art.moonLight.color.lerp(palette.moonlight,blend);
+  art.rimLight.color.lerp(palette.accent,blend);
+  for(const mat of art.tileMaterials)mat.color.lerp(palette.stone,blend*.28);
   for(const prop of [...art.scenery,...art.paving,...art.laneMarks]){
-    prop.mesh.position.z+=speed*dt;
-    if(prop.mesh.position.z>12)prop.mesh.position.z-=prop.span;
+    prop.mesh.position.z+=speed*elapsed;
+    if(prop.mesh.position.z>12){
+      prop.mesh.position.z-=prop.span;
+      if(prop.styles){
+        prop.styles.forEach((g,i)=>{g.visible=i===art.region;});
+      }
+    }
   }
-  art.mist.position.x=Math.sin(Date.now()*.00012)*1.6;
+  art.mist.position.x=Math.sin(art.elapsed*.24)*1.6;
+  art.mist.position.y=3+Math.sin(art.elapsed*.51)*.22;
+  return art.region;
 }
