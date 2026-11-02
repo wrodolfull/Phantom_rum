@@ -18,6 +18,8 @@ export interface RunSnapshot {
   chaseDone:boolean;
   /** One-shot platform section, after the 3D pursuit. Optional for old saves. */
   platformDone?:boolean;
+  /** Possessed-bat bonus is one-time per run. Optional on previous snapshots. */
+  batDone?:boolean;
 }
 export interface ChaseGate {
   distancePx:number;
