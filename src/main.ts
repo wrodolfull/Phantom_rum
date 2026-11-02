@@ -190,6 +190,8 @@ class GameScene extends Phaser.Scene {
     this.forceTutorial=data?.resume?.forceTutorial??(data?.forceTutorial===true);
     document.documentElement.dataset.phantomPlatformDone=String(
       data?.resume?.platformDone===true);
+    document.documentElement.dataset.phantomBatDone=String(
+      data?.resume?.batDone===true);
     reportMode("runner",data?.resume
       ?"returned at "+Math.floor(data.resume.distancePx/10)+"m":"fresh run");
   }
@@ -697,6 +699,7 @@ class GameScene extends Phaser.Scene {
         .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
     }else this.phantom.setTexture(
       appearanceTexture(this.heroId,this.accessoryId,false,"hurt")).setAlpha(1).setScale(1);
+    document.documentElement.dataset.phantomRunnerMeters=String(Math.floor(this.distance/10));
     const hudText="PHANTOM   "+Math.floor(this.distance/10)+" m   ◆ "+this.score;
     if(hudText!==this.lastHud){this.hud.setText(hudText);this.lastHud=hudText;}
     const currentTier=difficulty(this.distance).tier;
