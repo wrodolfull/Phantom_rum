@@ -787,6 +787,12 @@ class GameScene extends Phaser.Scene {
       String(Math.ceil(this.hunterState.danger));
     document.documentElement.dataset.phantomSoulCompanions=
       String(this.hunterState.companions);
+    document.documentElement.dataset.phantomHunterX=
+      this.hunterSprite.x.toFixed(1);
+    document.documentElement.dataset.phantomWaveState=
+      this.hunterState.waveSeconds>0?"active":
+      canActivateSpectralWave(this.hunterState)?"ready":
+      this.hunterState.companions+"/3";
     document.documentElement.dataset.phantomWaveActive=
       String(this.hunterState.waveSeconds>0);
   }
