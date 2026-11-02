@@ -24,6 +24,14 @@ export interface RunSnapshot {
   hunterDanger?:number;
   /** Friendly souls recruited by the 2D runner (0–5). */
   soulCompanions?:number;
+  /** Fair, randomized event scheduler persisted between scenes. */
+  specialSeed?:number;
+  specialNextAtPx?:number;
+  specialLast?:"chase"|"platform"|"bat"|null;
+  specialCounts?:[number,number,number];
+  specialEvents?:number;
+  /** Dynamic end of the current randomized 3D stage. */
+  specialChaseEndPx?:number;
 }
 export interface ChaseGate {
   distancePx:number;
@@ -40,8 +48,8 @@ export function shouldStartChase(input:ChaseGate):boolean{
     input.nearestHazardPx>=145;
 }
 /** Distance AND active chase play time must be met, never a loading/fade frame. */
-export function chaseCompleted(distancePx:number,activeSeconds:number=Infinity):boolean{
-  return distancePx>=CHASE_END_PX && activeSeconds>=CHASE_MIN_PLAY_SECONDS;
+export function chaseCompleted(distancePx:number,activeSeconds:number=Infinity,endPx=CHASE_END_PX):boolean{
+  return distancePx>=endPx && activeSeconds>=CHASE_MIN_PLAY_SECONDS;
 }
 export function mergeRun(before:RunSnapshot,after:Partial<RunSnapshot>):RunSnapshot {
   return {
