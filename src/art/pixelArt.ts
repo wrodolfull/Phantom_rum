@@ -79,51 +79,64 @@ function ghost(c:CanvasRenderingContext2D,phase:boolean,frame:number,
   }
 }
 function bat(c:CanvasRenderingContext2D):void {
-  // Dark purple bat, coral eyes; never mistaken for a friendly ghost.
-  const ink="#272040",wing="#785a9b",shade="#ac8cc0";
-  dot(c,ink,0,5,10,3);dot(c,ink,18,5,10,3);
-  dot(c,wing,1,3,9,7);dot(c,wing,18,3,9,7);
-  dot(c,shade,2,5,4,2);dot(c,shade,21,5,4,2);
-  dot(c,ink,0,12,4,4);dot(c,ink,24,12,4,4);
-  dot(c,ink,9,4,10,18);dot(c,shade,10,7,8,12);
-  dot(c,ink,10,2,3,5);dot(c,ink,15,2,3,5);
-  dot(c,"#ff8aa3",11,11,2,3);dot(c,"#ff8aa3",16,11,2,3);
-  dot(c,ink,12,18,5,2);dot(c,shade,13,20,2,3);
+  // Broad pointed wings + face, contrasting ivory fangs and red eyes.
+  const dark="#1e2039",purple="#8d5da9",shine="#dfafea";
+  dot(c,dark,0,3,10,4);dot(c,dark,18,3,10,4);
+  dot(c,purple,1,5,10,7);dot(c,purple,17,5,10,7);
+  dot(c,shine,2,6,6,2);dot(c,shine,20,6,6,2);
+  for(const x of [0,5,10,17,22,26])dot(c,dark,x,12,3,5);
+  dot(c,dark,8,3,12,18);dot(c,purple,10,5,8,14);
+  dot(c,dark,9,0,4,7);dot(c,dark,16,0,4,7);
+  dot(c,"#f65a7c",10,10,3,4);dot(c,"#f65a7c",16,10,3,4);
+  dot(c,"#fff5ff",11,10,1,2);dot(c,"#fff5ff",17,10,1,2);
+  dot(c,dark,12,17,6,3);
+  dot(c,"#fff5ea",12,18,2,4);dot(c,"#fff5ea",16,18,2,4);
+  dot(c,shine,13,21,3,2);
 }
 function hunter(c:CanvasRenderingContext2D):void {
-  const edge="#30233b",coat="#6c566e";
-  dot(c,edge,5,51,7,7);dot(c,edge,16,51,7,7);
-  dot(c,coat,6,28,16,25);dot(c,"#a98583",9,29,11,8);
-  dot(c,edge,4,25,20,4);dot(c,edge,7,13,15,13);
-  dot(c,"#d2ad88",9,15,11,11);dot(c,edge,10,18,3,3);dot(c,edge,17,18,3,3);
-  dot(c,edge,3,12,22,5);dot(c,coat,7,5,15,11);dot(c,edge,10,2,9,5);
-  dot(c,edge,1,34,7,17);dot(c,edge,21,34,5,16);
-  dot(c,"#e5b466",1,40,7,11);dot(c,"#ffefb2",3,43,3,5);
-  dot(c,"#6b4b7b",9,31,2,18);dot(c,"#6b4b7b",18,31,2,18);
+  // Stationary sentinel hazard, not the animated pursuer. Net and red lamp.
+  const edge="#20223c",coat="#965e65",trim="#e2b0a9";
+  dot(c,edge,5,49,7,9);dot(c,edge,17,49,7,9);
+  dot(c,coat,6,28,18,22);dot(c,edge,4,27,22,4);
+  dot(c,trim,9,30,11,5);dot(c,coat,3,33,5,14);
+  dot(c,edge,8,11,15,17);dot(c,"#dfbb99",9,14,13,12);
+  dot(c,edge,3,8,23,5);dot(c,coat,7,2,15,10);
+  dot(c,edge,10,0,9,5);dot(c,trim,8,7,15,3);
+  dot(c,edge,10,17,3,4);dot(c,edge,18,17,3,4);
+  dot(c,"#fff0de",11,18,1,2);dot(c,"#fff0de",19,18,1,2);
+  dot(c,edge,2,27,3,31);dot(c,"#d5b0c3",0,24,7,4);
+  dot(c,"#e5a35f",22,34,4,13);
+  dot(c,"#ffe7a3",23,38,3,6);
+  dot(c,"#ff6585",18,27,3,4);
 }
 function wraith(c:CanvasRenderingContext2D):void {
-  const border="#5b3597",body="#b88cff";
-  dot(c,border,7,7,10,39);dot(c,body,8,6,9,33);
-  dot(c,border,5,10,14,26);dot(c,body,6,10,12,24);
-  dot(c,border,2,15,20,21);dot(c,body,3,16,18,17);
-  dot(c,border,5,2,14,15);dot(c,body,7,3,10,13);
-  dot(c,"#3e245c",6,16,4,6);dot(c,"#3e245c",14,16,4,6);
-  dot(c,"#ff82d2",7,17,2,3);dot(c,"#ff82d2",15,17,2,3);
-  dot(c,"#fff3fe",11,28,3,3);
-  dot(c,border,0,30,5,10);dot(c,border,18,32,4,12);
-  dot(c,"#f0c4ff",7,36,4,7);dot(c,"#f0c4ff",14,38,3,8);
+  // Floating spirit: tapered lower tail, raised arms, crimson angry eyes.
+  const edge="#623798",body="#e0b5ff",shadow="#aa75df";
+  dot(c,edge,6,6,11,33);dot(c,body,8,7,8,31);
+  dot(c,edge,4,11,15,28);dot(c,body,6,11,12,25);
+  dot(c,edge,2,16,19,20);dot(c,shadow,4,19,15,15);
+  dot(c,edge,0,21,5,16);dot(c,edge,18,20,4,16);
+  dot(c,shadow,0,20,3,12);dot(c,shadow,20,22,2,9);
+  dot(c,edge,8,1,8,9);dot(c,body,9,4,6,9);
+  dot(c,"#fc5b9b",6,17,5,5);dot(c,"#fc5b9b",13,17,5,5);
+  dot(c,"#222247",7,18,3,4);dot(c,"#222247",14,18,3,4);
+  dot(c,"#ffffff",8,18,1,1);dot(c,"#ffffff",15,18,1,1);
+  dot(c,edge,10,28,5,3);
+  dot(c,edge,5,35,4,9);dot(c,edge,12,35,5,13);
+  dot(c,body,7,36,2,7);dot(c,body,14,36,2,8);
 }
 function spikes(c:CanvasRenderingContext2D):void {
-  const base="#423859",metal="#c6a2dc";
+  // Bone stakes with unmistakable sharp silhouettes and crimson warning.
+  const base="#3b2b4b",bone="#fff0d9",edge="#a88096";
   dot(c,base,0,13,30,4);
   for(let i=0;i<5;i++){
-    const x=i*6;
-    dot(c,metal,x+2,3,2,10);
-    dot(c,metal,x+1,7,4,7);
-    dot(c,"#f2dafa",x+2,1,1,7);
-    dot(c,"#705b8b",x+4,9,1,5);
+    const x=1+i*6;
+    dot(c,edge,x+1,8,4,6);
+    dot(c,bone,x+2,2,2,12);
+    dot(c,"#ffffff",x+2,1,1,4);
+    dot(c,base,x+3,10,2,5);
   }
-  dot(c,base,0,15,30,2);
+  dot(c,"#ed6777",0,15,30,2);
 }
 function nearGraves(c:CanvasRenderingContext2D):void {
   // High-contrast objects slide quickly to sell player speed.
@@ -149,36 +162,42 @@ function debris(c:CanvasRenderingContext2D):void {
   }
 }
 function wall(c:CanvasRenderingContext2D):void {
-  // A tall, physically impassable wall: Phantom must phase through it.
-  // It extends beyond the maximum 60px jump arc.
-  dot(c,'#536081',0,0,26,66);
-  dot(c,C.stone,2,2,22,62);
-  for(const y of [11,26,42,57]){
-    dot(c,'#495675',0,y,26,2);
-    dot(c,'#bdc9df',2,y+2,22,2);
+  // Massive stone slab; blue rune makes phase requirement unmistakable.
+  const edge="#242d4c",stone="#6c7393";
+  dot(c,edge,0,0,26,66);dot(c,stone,2,2,22,62);
+  dot(c,"#b6b4d2",3,4,19,4);
+  for(const y of [14,29,44,59]){
+    dot(c,edge,1,y,24,2);dot(c,"#8a92b2",3,y+2,20,2);
   }
-  for(const [x,y,len] of [[10,0,11],[6,13,13],[17,28,14],[11,44,13],[6,59,5]])
-    dot(c,'#586786',x,y,2,len);
-  dot(c,'#d0d8e8',3,3,19,5);
-  dot(c,'#667396',3,32,20,8);
-  dot(c,'#303861',0,63,26,3);
+  dot(c,"#3a436e",4,15,18,40);
+  dot(c,"#6cf1ff",12,19,3,32);
+  dot(c,"#8eefff",7,27,13,3);
+  dot(c,"#8eefff",8,22,4,4);dot(c,"#8eefff",15,38,4,4);
+  dot(c,"#d0ffff",11,23,5,21);
+  dot(c,edge,0,63,26,3);
 }
 function grave(c:CanvasRenderingContext2D):void {
-  for(let y=0;y<32;y++){
-    const start=y<3?9:y<6?6:2;
-    if(y<4)continue;
-    dot(c,'#5d668c',start,y,24-2*start);
-    if(y<29)dot(c,C.stone,start+2,y,20-2*start);
+  const edge="#39435e",stone="#aebad4";
+  dot(c,edge,6,3,12,4);dot(c,stone,7,4,10,3);
+  for(let y=6;y<29;y++){
+    const x=y<10?3:1;
+    dot(c,edge,x,y,24-2*x);
+    dot(c,stone,x+2,y,20-2*x);
   }
-  dot(c,'#e0e2ed',9,8,5,2);
-  dot(c,C.ink,10,16,4,11);dot(c,C.ink,7,19,10,3);
-  dot(c,'#516080',0,29,24,3);
+  dot(c,"#7b89a6",3,12,18,2);
+  dot(c,edge,7,16,10,3);dot(c,edge,10,19,4,7);
+  dot(c,"#e4f1fa",8,16,4,1);dot(c,"#e4f1fa",15,16,1,1);
+  dot(c,edge,0,29,24,3);
 }
 function ward(c:CanvasRenderingContext2D):void {
-  dot(c,'#522c8e',3,0,12,50);dot(c,'#bf76ff',2,4,14,42);
-  dot(c,'#e3baff',5,7,8,35);dot(c,'#633b9c',7,12,4,27);
-  dot(c,'#ffffff',8,18,2,14);dot(c,'#ffffff',5,24,8,2);
-  dot(c,'#4f2d85',0,46,18,4);
+  // Magical spectral gate — clearly distinct from solid grey stone.
+  const edge="#60359d",plasma="#c174f5";
+  dot(c,edge,3,0,12,50);dot(c,plasma,3,3,12,43);
+  dot(c,"#f7baff",5,7,8,35);dot(c,"#6839ad",7,10,4,30);
+  dot(c,"#fff2c1",8,14,2,22);
+  dot(c,"#fff2c1",4,24,10,2);
+  dot(c,"#fff2c1",6,18,6,2);dot(c,"#ff8ad4",4,38,9,3);
+  dot(c,"#442a84",0,46,18,4);
 }
 function glow(c:CanvasRenderingContext2D,blue:boolean):void {
   const edge=blue?'#336ba8':'#936d47';
