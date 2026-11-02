@@ -123,3 +123,15 @@ Um morcego especial terá janela de captura sincronizada por um anel pulsante. A
 - Use `?test_chase=1` para testar a perseguição sem precisar alcançar 800 metros.
 
 Confira [docs/3d-chase-fix.md](docs/3d-chase-fix.md).
+
+## Spooky Arcade 3D — revisão visual (PR #13)
+- Perseguição 3D redesenhada no estilo **cartoon low-poly noturno**, com lua, estrelas, neblina, colinas e iluminação azulada.
+- Pista com blocos de pedra estilizados, bordas claras, três faixas legíveis e cenário decorativo em movimento.
+- Phantom em 3D com silhueta chibi, olhos, bochechas e caudas, preservando skins e acessórios da loja.
+- Caçador com modelagem estilizada, chapéu e lanterna; lápides, portões, barreiras, orbes e Essências com materiais e silhuetas próprios.
+- Versão de compatibilidade 2.5D alinhada à nova paleta.
+- Modelos geométricos procedurais, sem assets externos, sombras dinâmicas ou pós-processamento pesado.
+- Mecânicas, duração da perseguição e correção dos obstáculos que grudavam no personagem preservadas.
+- Confira [docs/3d-art-foundation.md](docs/3d-art-foundation.md).
+
+Para testar o visual diretamente após o deploy, acesse `?test_chase=1&v=0100` e confira a marca `BUILD 0.10.0-art-20261102`.
