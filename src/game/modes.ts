@@ -20,6 +20,10 @@ export interface RunSnapshot {
   platformDone?:boolean;
   /** Possessed-bat bonus is one-time per run. Optional on previous snapshots. */
   batDone?:boolean;
+  /** Persistent chase meter shared by 2D and 3D (0–100). */
+  hunterDanger?:number;
+  /** Friendly souls recruited by the 2D runner (0–5). */
+  soulCompanions?:number;
 }
 export interface ChaseGate {
   distancePx:number;

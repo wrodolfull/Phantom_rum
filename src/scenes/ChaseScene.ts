@@ -82,7 +82,8 @@ export class ChaseScene extends Phaser.Scene {
   init(data:RunSnapshot){this.run={...data,chaseDone:true};}
   async create(){
     this.lane=1;this.jumpHeight=0;this.jumpVelocity=0;this.timeAlive=0;
-    this.spawnClock=0;this.spawnIndex=0;this.hunterPressure=.16;
+    this.spawnClock=0;this.spawnIndex=0;
+    this.hunterPressure=Math.max(.11,Math.min(.95,(this.run.hunterDanger??16)/100));
     this.activeSeconds=0;this.fallbackStarted=false;
     this.initialDistance=this.run.distancePx;
     this.readyAtWall=0;this.validFinish=false;
@@ -130,7 +131,8 @@ export class ChaseScene extends Phaser.Scene {
     this.ready=false;
     this.gesture?.clear();
     this.scene.start("chase-fallback",{
-      run:{...this.run,energy:this.run.energy,chaseDone:true},
+      run:{...this.run,energy:this.run.energy,chaseDone:true,
+        hunterDanger:Math.round(this.hunterPressure*100)},
       reason:error instanceof Error?error.message:String(error)
     });
   }
@@ -428,7 +430,8 @@ export class ChaseScene extends Phaser.Scene {
         reportMode("chase-three","exit after "+
           this.activeSeconds.toFixed(1)+"s at "+
           Math.floor(this.run.distancePx/10)+"m");
-        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX})});
+        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX,
+          hunterDanger:Math.round(this.hunterPressure*100)})});
         return;
       }
       if(this.overlay)this.overlay.style.opacity=String(1-this.returningTime/.72);

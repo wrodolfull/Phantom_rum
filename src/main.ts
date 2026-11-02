@@ -28,6 +28,15 @@ import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
 import {initFullscreen} from "./fullscreen";
+import {ensureHunterHordeArt,PURSUER_TEXTURES,SOUL_PICKUP_TEXTURE,SOUL_FOLLOWER_TEXTURE}
+  from "./art/hunterHordeArt";
+import {
+  initialHunterState,tickHunter,hunterHit,rescueSoul,activateSpectralWave,
+  canActivateSpectralWave,hunterScreenX,waveBreaksObstacle,
+  SOUL_FIRST_AT_PX,SOUL_SPAWN_SPACING_PX,MAX_SOUL_COMPANIONS,
+  SOUL_WAVE_COST,soulPickupReached,safeSoulLocation,
+  type HunterState,type HunterHitKind
+} from "./game/hunterHorde";
 
 // The orientation reminder is dismissible without blocking portrait fallback.
 try{
@@ -43,7 +52,8 @@ const showDebug=new URLSearchParams(location.search).get("debug")==="1";
 const W = 480, H = 270, GROUND = GROUND_Y, PLAYER_X = 98;
 const MAX_EP = 100, DRAIN = 30, REGEN = 12;
 const GRAVITY = 900, JUMP = -330;
-type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; counted?: boolean; sprite?: Phaser.GameObjects.Image };
+type Thing = { kind: ObstacleKind; x: number; width: number; collected?: boolean; counted?: boolean; hit?:boolean; sprite?: Phaser.GameObjects.Image };
+type SoulOnCourse={x:number;collected:boolean;sprite:Phaser.GameObjects.Image};
 type Motion = "grounded" | "jumping" | "falling";
 type Material = "physical" | "intangible";
 
@@ -133,6 +143,18 @@ class GameScene extends Phaser.Scene {
   private energyBar!: Phaser.GameObjects.Graphics;
   private overlay!: Phaser.GameObjects.Text;
   private particles!: PhantomEffects;
+  private hunterState:HunterState=initialHunterState();
+  private hunterSprite!:Phaser.GameObjects.Image;
+  private soulFollowers:Phaser.GameObjects.Image[]=[];
+  private soulPickups:SoulOnCourse[]=[];
+  private nextSoulAt=SOUL_FIRST_AT_PX;
+  private hunterHud!:Phaser.GameObjects.Text;
+  private hunterBar!:Phaser.GameObjects.Graphics;
+  private waveButton!:Phaser.GameObjects.Text;
+  private hunterNotice!:Phaser.GameObjects.Text;
+  private hunterNoticeTime=0;
+  private waveGraphics!:Phaser.GameObjects.Graphics;
+  private capturing=false;
   private pauseButton!: Phaser.GameObjects.Text;
   private musicButton!: Phaser.GameObjects.Text;
   private effectsButton!: Phaser.GameObjects.Text;
@@ -184,7 +206,7 @@ class GameScene extends Phaser.Scene {
   private walls=0;
   private orbs=0;
   private acc=0;
-  private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key};
+  private keys!: {space:Phaser.Input.Keyboard.Key; up:Phaser.Input.Keyboard.Key; shift:Phaser.Input.Keyboard.Key; esc:Phaser.Input.Keyboard.Key; music:Phaser.Input.Keyboard.Key; effects:Phaser.Input.Keyboard.Key; wave:Phaser.Input.Keyboard.Key};
   constructor(){super("game");}
   init(data?:{forceTutorial?:boolean;resume?:RunSnapshot}){
     this.resumeData=data?.resume;
@@ -193,6 +215,8 @@ class GameScene extends Phaser.Scene {
       data?.resume?.platformDone===true);
     document.documentElement.dataset.phantomBatDone=String(
       data?.resume?.batDone===true);
+    document.documentElement.dataset.phantomHunterDanger=String(
+      Math.ceil(data?.resume?.hunterDanger??16));
     reportMode("runner",data?.resume
       ?"returned at "+Math.floor(data.resume.distancePx/10)+"m":"fresh run");
   }
@@ -202,6 +226,9 @@ class GameScene extends Phaser.Scene {
     this.chaseDone=false;this.platformDone=false;this.batDone=false;
     this.batWorldX=null;this.batNextAtPx=BAT_TRIGGER_PX;
     this.batMessageTime=0;this.transitioning=false;
+    this.capturing=false;this.hunterState=initialHunterState();
+    this.nextSoulAt=SOUL_FIRST_AT_PX;this.soulPickups=[];
+    this.soulFollowers=[];this.hunterNoticeTime=0;
     this.performance.reset();this.performanceUpdate=0;this.lastHud="";this.lastTier=-1;
     this.jumps=0;this.phases=0;this.walls=0;this.orbs=0;this.tutorialEndTime=0;
     this.tutorialEnabled=this.forceTutorial||!progressStore.load().tutorialDone;
@@ -214,6 +241,8 @@ class GameScene extends Phaser.Scene {
       this.chaseDone=run.chaseDone;
       this.platformDone=run.platformDone===true;
       this.batDone=run.batDone===true;
+      this.hunterState=initialHunterState(run.hunterDanger,run.soulCompanions);
+      this.nextSoulAt=this.distance+SOUL_FIRST_AT_PX;
       // A safe gap before the first obstacle on returning from the chase.
       this.spawnAt=this.distance+360;
       this.planner=new CoursePlanner(Date.now(),true);
@@ -226,11 +255,18 @@ class GameScene extends Phaser.Scene {
     this.heroId=look.hero;this.accessoryId=look.accessory;
     ensureAppearanceVisuals(this,this.heroId,this.accessoryId);
     ensureBatArt(this);
+    ensureHunterHordeArt(this);
     this.groundTiles=this.add.tileSprite(0, 211, W, H-211, "ground").setOrigin(0,0).setDepth(2);
     this.world=this.add.graphics().setDepth(3);
     this.speedLines=this.add.graphics().setDepth(1);
     this.phantom=this.add.image(PLAYER_X,this.y+16,
       appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
+    this.hunterSprite=this.add.image(hunterScreenX(this.hunterState.danger),
+      GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setDepth(5);
+    this.soulFollowers=Array.from({length:MAX_SOUL_COMPANIONS},()=>
+      this.add.image(-20,GROUND-12,SOUL_FOLLOWER_TEXTURE)
+        .setScale(.64).setDepth(5).setVisible(false));
+    this.waveGraphics=this.add.graphics().setDepth(5);
     this.particles=new PhantomEffects(this);
     this.batRing=this.add.graphics().setDepth(10);
     this.batArt=this.add.image(0,GROUND-87,BAT_SPECIAL_KEY)
@@ -244,14 +280,32 @@ class GameScene extends Phaser.Scene {
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
+    this.add.graphics().setDepth(18).fillStyle(0x201939,.9)
+      .fillRoundedRect(5,46,182,30,4);
+    this.hunterHud=this.add.text(10,48,"",{
+      fontFamily:"monospace",fontSize:"9px",color:"#fff0ee",
+      stroke:"#1d142b",strokeThickness:2
+    }).setDepth(21);
+    this.hunterBar=this.add.graphics().setDepth(21);
+    this.hunterNotice=this.add.text(W/2,82,"",{
+      fontFamily:"monospace",fontSize:"10px",color:"#f9efff",
+      backgroundColor:"#4e375e",padding:{x:6,y:4},align:"center"
+    }).setOrigin(.5,0).setDepth(26).setVisible(false);
+    this.waveButton=this.add.text(424,206,"ONDA [Q]",{
+      fontFamily:"monospace",fontSize:"9px",color:"#e5ffff",
+      backgroundColor:"#33506d",padding:{x:5,y:5}
+    }).setOrigin(.5).setDepth(27).setInteractive({useHandCursor:true});
+    this.waveButton.on("pointerdown",()=>this.triggerSpectralWave());
+    this.waveButton.setVisible(false);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
-    this.tutorialBanner=this.add.text(W/2,61,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
+    this.tutorialBanner=this.add.text(W/2,109,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
     this.updateTutorial(PLAYER_X);
     this.overlay=this.add.text(W/2,H/2,"",{fontFamily:"monospace",fontSize:"14px",align:"center",color:"#ffffff",backgroundColor:"#332850",padding:{x:14,y:10}}).setOrigin(.5).setDepth(30).setVisible(false);
     this.keys=this.input.keyboard!.addKeys({
       space:Phaser.Input.Keyboard.KeyCodes.SPACE,up:Phaser.Input.Keyboard.KeyCodes.UP,
       shift:Phaser.Input.Keyboard.KeyCodes.SHIFT,esc:Phaser.Input.Keyboard.KeyCodes.ESC,
-      music:Phaser.Input.Keyboard.KeyCodes.M,effects:Phaser.Input.Keyboard.KeyCodes.N
+      music:Phaser.Input.Keyboard.KeyCodes.M,effects:Phaser.Input.Keyboard.KeyCodes.N,
+      wave:Phaser.Input.Keyboard.KeyCodes.Q
     }) as typeof this.keys;
     const uiStyle={fontFamily:"monospace",fontSize:"10px",color:"#f2f1ff",backgroundColor:"#34305c",padding:{x:5,y:5}};
     this.musicButton=this.add.text(348,9,"",uiStyle).setDepth(25).setInteractive({useHandCursor:true});
@@ -271,9 +325,13 @@ class GameScene extends Phaser.Scene {
     document.addEventListener("visibilitychange",onVisibility);
     window.addEventListener("blur",pauseForBackground);
     window.addEventListener("keydown",this.onBatKeyDown);
+    window.addEventListener("keydown",this.onHunterQADown);
+    window.addEventListener("keydown",this.onSpectralWaveKeyDown);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN,()=>{
       this.gesture.clear();
       window.removeEventListener("keydown",this.onBatKeyDown);
+      window.removeEventListener("keydown",this.onHunterQADown);
+      window.removeEventListener("keydown",this.onSpectralWaveKeyDown);
       document.removeEventListener("visibilitychange",onVisibility);
       window.removeEventListener("blur",pauseForBackground);
     });
@@ -309,6 +367,7 @@ class GameScene extends Phaser.Scene {
     });
     // Preload only the segment(s) actually needed ahead of the player.
     while(this.spawnAt<this.distance+W+240)this.generate();
+    this.maybeSpawnSoul();
   }
   private updateTutorial(px:number){
     if(!this.tutorialEnabled)return;
@@ -344,7 +403,9 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,
-      platformDone:this.platformDone,batDone:this.batDone
+      platformDone:this.platformDone,batDone:this.batDone,
+      hunterDanger:this.hunterState.danger,
+      soulCompanions:this.hunterState.companions
     };
     this.tutorialBanner.setVisible(true).setText("PORTAL ABERTO! A CÂMERA ESTÁ VIRANDO...");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -376,7 +437,9 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,platformDone:false,
-      batDone:this.batDone
+      batDone:this.batDone,
+      hunterDanger:this.hunterState.danger,
+      soulCompanions:this.hunterState.companions
     };
     this.tutorialBanner.setVisible(true)
       .setText("UMA MANSÃO! O CAMINHO SEGUE POR DENTRO...");
@@ -413,7 +476,9 @@ class GameScene extends Phaser.Scene {
       distancePx:this.distance,energy:this.ep,essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
       forceTutorial:this.forceTutorial,chaseDone:true,
-      platformDone:this.platformDone,batDone:true
+      platformDone:this.platformDone,batDone:true,
+      hunterDanger:this.hunterState.danger,
+      soulCompanions:this.hunterState.companions
     };
     reportMode("bat-captured","at "+Math.floor(this.distance/10)+"m");
     this.cameras.main.once(Phaser.Cameras.Scene2D.Events.FADE_OUT_COMPLETE,()=>{
@@ -488,6 +553,154 @@ class GameScene extends Phaser.Scene {
       .setText(ready?"AGORA! TOQUE NO MORCEGO OU APERTE E":
         "MORCEGO RARO! O CÍRCULO ESTÁ DIMINUINDO...");
   }
+  private showHunterNotice(message:string,seconds=1.5){
+    this.hunterNotice.setText(message).setVisible(true);
+    this.hunterNoticeTime=seconds;
+  }
+  private sufferHunterHit(kind:HunterHitKind):void{
+    const result=hunterHit(this.hunterState,kind);
+    if(!result.hit)return;
+    this.hunterState=result.state;
+    this.particles.burst("hit",PLAYER_X,this.y+15,18);
+    retroAudio.play("hit");
+    this.cameras.main.shake(100,.006);
+    if(result.protectedBySoul)
+      this.showHunterNotice("UMA ALMA PROTEGEU PHANTOM! +"+result.amount+" PERIGO");
+    else this.showHunterNotice("O CAÇADOR SE APROXIMA! +"+result.amount+" PERIGO");
+    if(result.caught)this.die();
+  }
+  private rescueFromPit():void{
+    // Falling is another mistake, NOT a one-hit kill. Recover on safe ground
+    // beyond the pit and award the same brief protection as a normal impact.
+    const center=this.distance+PLAYER_X;
+    const pit=this.things.find(t=>t.kind==="gap"&&
+      t.x<=center+65&&t.x+t.width>=center-90);
+    const safeCenter=pit?pit.x+pit.width+48:center+140;
+    this.distance=Math.max(this.distance,safeCenter-PLAYER_X);
+    this.y=GROUND-25;this.vy=0;this.motion="grounded";
+    this.material="physical";this.gesture.clear();this.gesturePhaseHeld=false;
+    this.jumpQueued=0;this.coyote=.12;
+    this.sufferHunterHit("pit");
+  }
+  private maybeSpawnSoul():void{
+    // Spawn only inside the currently planned path; use the same safe-space
+    // check as the segment generator to keep pickups away from hazards.
+    let attempts=0;
+    while(this.nextSoulAt<this.distance+W+350&&
+      this.nextSoulAt<this.spawnAt-100&&attempts++<3){
+      const at=safeSoulLocation(this.nextSoulAt,this.things);
+      this.nextSoulAt=at+SOUL_SPAWN_SPACING_PX;
+      const sprite=this.add.image(at,GROUND-20,SOUL_PICKUP_TEXTURE)
+        .setDepth(5).setScale(.85);
+      this.soulPickups.push({x:at,collected:false,sprite});
+    }
+  }
+  private collectNearbySouls(previousX:number,currentX:number):void{
+    for(const soul of this.soulPickups){
+      if(soul.collected)continue;
+      if(!soulPickupReached(previousX,currentX,soul.x,
+        this.motion==="grounded",this.material==="physical"))continue;
+      soul.collected=true;
+      soul.sprite.setVisible(false);
+      const wasFull=this.hunterState.companions>=MAX_SOUL_COMPANIONS;
+      this.hunterState=rescueSoul(this.hunterState);
+      this.particles.burst("collect",PLAYER_X+8,GROUND-20,12);
+      retroAudio.play("collect");
+      this.showHunterNotice(wasFull?"ALMA RESGATADA! PERIGO -5":
+        "ALMA RESGATADA! ELA SEGUE VOCÊ!");
+    }
+    this.soulPickups=this.soulPickups.filter(soul=>{
+      if(soul.collected||soul.x<this.distance-70){
+        soul.sprite.destroy();return false;
+      }
+      return true;
+    });
+  }
+  private triggerSpectralWave():void{
+    if(!this.alive||this.paused||this.transitioning||
+      !canActivateSpectralWave(this.hunterState))return;
+    this.hunterState=activateSpectralWave(this.hunterState);
+    this.showHunterNotice("ONDA ESPECTRAL! ABRINDO CAMINHO",2);
+    this.particles.burst("phaseOn",PLAYER_X,GROUND-34,25);
+    retroAudio.play("phaseOn");
+    // The wave clears physical threats within sight but never pits,
+    // spectral wards, collectibles or the progression transition.
+    for(const t of this.things){
+      const ahead=t.x-this.distance-PLAYER_X;
+      if(!t.collected&&waveBreaksObstacle(t.kind)&&ahead>=-22&&ahead<340){
+        t.collected=true;t.sprite?.setVisible(false);
+      }
+    }
+  }
+  private drawHunterAndSouls():void{
+    this.hunterSprite.setTexture(PURSUER_TEXTURES[Math.floor(this.elapsed*7)%2])
+      .setPosition(hunterScreenX(this.hunterState.danger),
+        GROUND+Math.sin(this.elapsed*12)*1.4)
+      .setTint(this.hunterState.danger>=80?0xff9eaf:0xffffff);
+    for(let i=0;i<this.soulFollowers.length;i++){
+      const sprite=this.soulFollowers[i];
+      const visible=i<this.hunterState.companions;
+      sprite.setVisible(visible);
+      if(!visible)continue;
+      const targetX=PLAYER_X-20-i*12;
+      const targetY=this.y+15-9-(i%2)*12;
+      sprite.setPosition(targetX,
+        targetY+Math.sin(this.elapsed*6+i*.8)*2);
+      sprite.setAlpha(this.hunterState.waveSeconds>0?.9:1);
+    }
+    for(const soul of this.soulPickups){
+      if(soul.collected)continue;
+      const x=soul.x-this.distance;
+      soul.sprite.setPosition(Math.round(x),
+        GROUND-22+Math.sin(this.elapsed*4+soul.x*.01)*3);
+      soul.sprite.setVisible(x>-30&&x<W+30);
+    }
+    this.waveGraphics.clear();
+    if(this.hunterState.waveSeconds>0){
+      const phase=this.elapsed*6;
+      const radius=22+Math.sin(phase)*4;
+      this.waveGraphics.lineStyle(2,0x8dedff,.78)
+        .strokeCircle(PLAYER_X,this.y+16,radius);
+      this.waveGraphics.lineStyle(1,0xc7afff,.43)
+        .strokeCircle(PLAYER_X,this.y+16,radius+10);
+    }
+    this.hunterHud.setText("CAÇADOR "+Math.ceil(this.hunterState.danger)+
+      "/100   ALMAS "+this.hunterState.companions);
+    this.hunterBar.clear()
+      .fillStyle(0x26213f).fillRect(10,64,170,7)
+      .fillStyle(this.hunterState.danger>=75?0xff7d8d:
+        this.hunterState.danger>=45?0xffc277:0x8bd8f3)
+      .fillRect(12,66,Math.round(166*this.hunterState.danger/100),3);
+    this.waveButton.setVisible(canActivateSpectralWave(this.hunterState));
+    if(this.hunterNoticeTime<=0)this.hunterNotice.setVisible(false);
+    document.documentElement.dataset.phantomHunterDanger=
+      String(Math.ceil(this.hunterState.danger));
+    document.documentElement.dataset.phantomSoulCompanions=
+      String(this.hunterState.companions);
+    document.documentElement.dataset.phantomWaveActive=
+      String(this.hunterState.waveSeconds>0);
+  }
+  private onSpectralWaveKeyDown=(event:KeyboardEvent)=>{
+    if(event.code==="KeyQ"&&!event.repeat&&this.sys.isActive()&&
+      this.alive&&!this.paused&&!this.transitioning){
+      event.preventDefault();
+      this.triggerSpectralWave();
+    }
+  };
+  private onHunterQADown=(event:KeyboardEvent)=>{
+    if(!new URLSearchParams(location.search).has("test_hunter")||
+      !this.sys.isActive()||event.repeat||!this.alive||this.paused)return;
+    if(event.code==="KeyH"){
+      event.preventDefault();
+      // QA only: simulate separated collisions without waiting for i-frames.
+      this.hunterState={...this.hunterState,invulnerable:0};
+      this.sufferHunterHit("obstacle");
+    }else if(event.code==="KeyJ"){
+      event.preventDefault();
+      this.hunterState=rescueSoul(this.hunterState);
+      this.showHunterNotice("ALMA RESGATADA (TESTE)");
+    }
+  };
   private generate(){
     const segment=this.planner.next({
       start:this.spawnAt,
@@ -527,7 +740,7 @@ class GameScene extends Phaser.Scene {
   update(_time:number,delta:number){
     const jump=Phaser.Input.Keyboard.JustDown(this.keys.space)||Phaser.Input.Keyboard.JustDown(this.keys.up);
     if(!this.alive){
-      if(jump)this.scene.restart({forceTutorial:this.forceTutorial});
+      if(jump&&!this.capturing)this.scene.restart({forceTutorial:this.forceTutorial});
       else this.particles.update(Math.min(delta/1000,.05),PLAYER_X,this.y+16,false);
       return;
     }
@@ -555,6 +768,9 @@ class GameScene extends Phaser.Scene {
   }
   private step(dt:number){
     this.elapsed+=dt;
+    this.hunterState=tickHunter(this.hunterState,dt);
+    if(this.hunterNoticeTime>0)
+      this.hunterNoticeTime=Math.max(0,this.hunterNoticeTime-dt);
     const previousMaterial=this.material;
     this.holdIntangible=this.keys.shift.isDown||this.gesturePhaseHeld;
     if(!this.holdIntangible)this.needsRelease=false;
@@ -596,7 +812,7 @@ class GameScene extends Phaser.Scene {
     if(canLand(prevY,this.y,this.vy,px,this.things)){
       this.y=GROUND-25;this.vy=0;this.motion="grounded";
     }else this.motion=this.vy<0?"jumping":"falling";
-    if(this.y>H+30){this.die();return;}
+    if(this.y>H+30){this.rescueFromPit();return;}
     // Continuous hitbox sweep with shared rules covered by unit tests.
     const swept={beforeX:prevX,afterX:px,beforeY:prevY,afterY:this.y};
     for(const t of this.things){
@@ -612,11 +828,21 @@ class GameScene extends Phaser.Scene {
           this.particles.burst("collect",PLAYER_X+8,this.y+10,10);retroAudio.play("collect");
         }
       }else if(touching&&requiresIntangible(t.kind)&&this.material==="physical"){
-        this.die();return;
+        if(this.hunterState.waveSeconds>0&&waveBreaksObstacle(t.kind)){
+          t.collected=true;t.sprite?.setVisible(false);
+          this.particles.burst("phaseOn",PLAYER_X,this.y+10,8);
+        }else if(!t.hit){
+          t.hit=true;this.sufferHunterHit("obstacle");
+          if(!this.alive)return;
+        }
       }else if(touching&&requiresPhysical(t.kind)&&this.material==="intangible"){
-        this.die();return;
+        if(!t.hit){
+          t.hit=true;this.sufferHunterHit("obstacle");
+          if(!this.alive)return;
+        }
       }
     }
+    this.collectNearbySouls(prevX,px);
     for(const t of this.things){
       if(t.kind==="wall"&&!t.counted&&px-10>t.x+t.width){t.counted=true;this.walls++;}
     }
@@ -626,6 +852,7 @@ class GameScene extends Phaser.Scene {
       return true;
     });
     while(this.spawnAt<this.distance+W+240)this.generate();
+    this.maybeSpawnSoul();
     this.particles.update(dt,PLAYER_X,this.y+15,this.material==="intangible");
     this.checkChaseTransition();
     this.checkPlatformTransition();
@@ -633,11 +860,24 @@ class GameScene extends Phaser.Scene {
   }
   private die(){
     if(!this.alive)return;
-    this.alive=false;
+    this.alive=false;this.capturing=true;
     this.material="physical";
-    this.particles.burst("hit",PLAYER_X,this.y+15,24);
+    this.gesture.clear();this.holdIntangible=false;
+    this.hunterState={...this.hunterState,danger:100,invulnerable:0,waveSeconds:0};
+    document.documentElement.dataset.phantomHunterDanger="100";
+    this.hunterSprite.setDepth(12);
+    this.showHunterNotice("100/100 — O CAÇADOR PEGOU PHANTOM!",3);
+    this.particles.burst("hit",PLAYER_X,this.y+15,28);
     retroAudio.stop();
     retroAudio.play("hit");
+    // A short visible catch animation makes the 100/100 threshold legible.
+    this.tweens.add({targets:this.hunterSprite,x:PLAYER_X-7,
+      duration:550,ease:"Sine.easeIn"});
+    this.time.delayedCall(720,()=>this.finishCapturedRun());
+  }
+  private finishCapturedRun(){
+    if(!this.capturing)return;
+    this.capturing=false;
     const stats:RunStats={
       meters:Math.floor(this.distance/10),essence:this.score,
       jumps:this.jumps,phases:this.phases,walls:this.walls,orbs:this.orbs,
@@ -688,6 +928,7 @@ class GameScene extends Phaser.Scene {
       }
     }
     this.drawBat();
+    this.drawHunterAndSouls();
     const frame=Math.floor(this.elapsed*9)%6;
     const intangible=this.material==="intangible";
     const airborne=this.motion!=="grounded";
@@ -696,7 +937,9 @@ class GameScene extends Phaser.Scene {
     if(this.alive){
       this.phantom.setTexture(texture)
         .setPosition(PLAYER_X,Math.round(this.y+16))
-        .setAlpha(intangible?.78+.09*Math.sin(this.elapsed*16):1)
+        .setAlpha(this.hunterState.invulnerable>0?
+          .55+.28*Math.sin(this.elapsed*22):
+          intangible?.78+.09*Math.sin(this.elapsed*16):1)
         .setScale(intangible?1+.025*Math.sin(this.elapsed*12):1);
     }else this.phantom.setTexture(
       appearanceTexture(this.heroId,this.accessoryId,false,"hurt")).setAlpha(1).setScale(1);

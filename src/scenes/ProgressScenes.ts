@@ -4,6 +4,7 @@ import {retroAudio} from "../audio/RetroAudio";
 import {ACHIEVEMENTS,nextDistanceGoal,progressStore,type Progress,type RunStats} from "../progression/progress";
 import {balance,activeAppearance} from "../shop/economy";
 import {ensureAppearanceVisuals,appearanceTexture} from "../art/pixelArt";
+import {reportMode} from "../game/diagnostics";
 
 const W=480,H=270;
 function sceneBackground(scene:Phaser.Scene){
@@ -23,6 +24,7 @@ export class ResultsScene extends Phaser.Scene {
   constructor(){super("results");}
   init(data:ResultsData){this.result=data;}
   create(){
+    reportMode("results","runner captured");
     retroAudio.stop();
     sceneBackground(this);
     const look=activeAppearance(this.result.progress);

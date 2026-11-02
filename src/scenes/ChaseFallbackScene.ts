@@ -73,7 +73,8 @@ export class ChaseFallbackScene extends Phaser.Scene {
     this.lane=1;this.playerX=W/2;this.jumping=0;this.jumpSpeed=0;
     this.intangible=false;this.heldPhase=false;this.phaseLocked=false;
     this.waveIndex=0;this.waves=[];this.spawnClock=0;
-    this.t=0;this.activeSeconds=0;this.pressure=.16;
+    this.t=0;this.activeSeconds=0;
+    this.pressure=Math.max(.11,Math.min(.95,(this.run.hunterDanger??16)/100));
     this.paused=false;this.finished=false;this.returnClock=0;
     this.hintClock=0;this.coinsSpark=0;
     this.sparks=new ChaseFallbackSparks();
@@ -174,7 +175,8 @@ export class ChaseFallbackScene extends Phaser.Scene {
     if(this.finished){
       this.returnClock+=delta;
       if(this.returnClock>.85){
-        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX,energy:this.energy})});
+        this.scene.start("game",{resume:mergeRun(this.run,{distancePx:CHASE_END_PX,energy:this.energy,
+          hunterDanger:Math.round(this.pressure*100)})});
         return;
       }
       this.render();return;

@@ -192,3 +192,19 @@ Versão de verificação: `BUILD 0.14.0-batflight-20261102`.
 - Para manter a geometria do jogo e do 3D fiel, o palco é centralizado em **16:9**, com barras laterais discretas quando o display tem proporção diferente. O HUD do Three.js acompanha o mesmo palco.
 - Botão tem acessibilidade por leitor de tela (aria-label, aria-pressed); não depende do Phaser e funciona também durante as transições.
 - Versão de teste: `BUILD 0.15.0-fullscreen-20261102`. Após merge/deploy, confira `?v=0150`.
+
+## Caçador no 2D e Comitiva Espectral (PR #19)
+
+No runner lateral, o caçador agora **corre visualmente atrás do Phantom**, com uma barra de perigo **0–100**. Acabou a morte por um único contato: cada erro aumenta a perseguição e só quando ela chegar a 100 o caçador alcança Phantom. Quedas em abismos também geram perigo e devolvem o personagem a um trecho seguro. Após ser atingido há um pequeno período de proteção para não sofrer dano várias vezes no mesmo obstáculo.
+
+Mecânica original inspirada em corridas de grupo:
+- **Resgate Almas Perdidas** douradas durante a corrida. Até cinco pequenos fantasmas seguem o Phantom.
+- Cada alma acompanhante pode ser consumida ao receber um golpe, **reduzindo o perigo causado**.
+- Junte **3 almas** e ative a **Onda Espectral** com **Q** (desktop) ou pelo botão **ONDA** (celular). Ela consome 3 almas, afasta o caçador e abre caminho por obstáculos físicos durante alguns segundos.
+- A onda não permite atravessar abismos sem saltar nem remove runas espirituais; trocar entre formas ainda é necessário.
+- O perigo e a comitiva são preservados ao entrar e sair da perseguição 3D, Mansão das Almas e voo do morcego.
+- O caçador tem duas poses originais em pixel art e animação de captura ao chegar a 100.
+
+Ver [docs/2d-hunter-soul-horde.md](docs/2d-hunter-soul-horde.md) para regras, balanceamento e testes.
+
+**Teste:** após merge e publicação, entre em `?test_hunter=1&v=0160`, confira **BUILD 0.16.0-hunter-20261102**. Nessa URL de QA, H simula erro, J resgata alma e Q ativa onda. Para testar o fluxo real, use o jogo normalmente.
