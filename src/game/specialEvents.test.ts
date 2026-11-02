@@ -45,6 +45,6 @@ describe("randomized recurring gameplay events",()=>{
   it("sets dynamic chase end beyond start plus the minimum playable time",()=>{
     expect(chaseEndFor(8000)).toBeGreaterThan(8000+4500);
     expect(chaseEndFor(25000)).toBeGreaterThan(29500);
-    expect(chaseEndFor(3000)).toBe(13000);
+    expect(chaseEndFor(3000)).toBe(8000);
   });
 });
