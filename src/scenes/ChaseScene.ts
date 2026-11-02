@@ -5,6 +5,7 @@ import {progressStore} from "../progression/progress";
 import {activeAppearance} from "../shop/economy";
 import {createChaseEnvironment,createChaseGhost,createChaseHunter,createChaseHazard,
   updateChaseEnvironment,type ChaseEnvironment} from "./chaseArt";
+import {chaseRegionName,type RegionIndex} from "./chaseRegions";
 import {ChaseInput} from "../input/ChaseInput";
 import {reportMode,reportChaseError,reportChaseSeconds} from "../game/diagnostics";
 import {ChaseClock} from "../game/ChaseClock";
@@ -32,6 +33,8 @@ export class ChaseScene extends Phaser.Scene {
   private heroColor=0xffffff;
   private environment?:ChaseEnvironment;
   private ghostHalo?:T.Object3D;
+  private lastRegion:RegionIndex=0;
+  private regionNoticeUntil=0;
   private hazards:Hazard[]=[];
   private gesture!:ChaseInput;
   private overlay?:HTMLDivElement;
@@ -85,6 +88,7 @@ export class ChaseScene extends Phaser.Scene {
     this.paused=false;this.returning=false;this.returningTime=0;
     this.ready=false;this.ended=false;this.hudClock=0;this.hitFlash=0;
     this.environment=undefined;this.ghostHalo=undefined;this.hazards=[];
+    this.lastRegion=0;this.regionNoticeUntil=0;
     this.clock.reset(performance.now());
     reportMode("chase-loading","Three.js import pending");
     retroAudio.start();
@@ -389,7 +393,14 @@ export class ChaseScene extends Phaser.Scene {
       }
       if(this.overlay)this.overlay.style.opacity=String(1-this.returningTime/.72);
     }
-    if(this.environment)updateChaseEnvironment(this.environment,dt);
+    if(this.environment){
+      const region=updateChaseEnvironment(
+        this.environment,dt,24,this.run.distancePx);
+      if(region!==this.lastRegion){
+        this.lastRegion=region;
+        this.regionNoticeUntil=this.timeAlive+2.8;
+      }
+    }
     if(this.ghostHalo){
       this.ghostHalo.rotation.z+=dt*.5;
       this.ghostHalo.scale.setScalar(this.intangible?1.22:1);
@@ -397,6 +408,8 @@ export class ChaseScene extends Phaser.Scene {
     if(this.hintElement){
       if(this.returning)this.hintElement.textContent="PORTAL ABERTO — VOLTANDO AO CEMITÉRIO 2D";
       else if(this.hitFlash>0)this.hintElement.textContent="O CAÇADOR SE APROXIMA! DESVIE!";
+      else if(this.timeAlive<this.regionNoticeUntil)
+        this.hintElement.textContent="NOVA REGIÃO: "+chaseRegionName(this.lastRegion);
       else if(this.timeAlive>5)this.hintElement.textContent="DESLIZE PARA TROCAR DE FAIXA";
       else if(this.timeAlive>2)this.hintElement.textContent="CUIDADO! O CAÇADOR ESTÁ ATRÁS!";
     }

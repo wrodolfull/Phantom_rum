@@ -135,3 +135,13 @@ Confira [docs/3d-chase-fix.md](docs/3d-chase-fix.md).
 - Confira [docs/3d-art-foundation.md](docs/3d-art-foundation.md).
 
 Para testar o visual diretamente após o deploy, acesse `?test_chase=1&v=0100` e confira a marca `BUILD 0.10.0-art-20261102`.
+
+## Três ambientes 3D na mesma perseguição (PR #14)
+- **Cemitério Esquecido (800–959 m):** lápides, ciprestes e lanternas sob luz roxa noturna.
+- **Bosque das Almas (960–1129 m):** árvores tortas, salgueiros e pequenas luzes fantasmagóricas, com céu verde-azulado.
+- **Ruínas Lunares (1130–1300 m):** portões quebrados, obeliscos rúnicos, memoriais e criptas, com céu violeta.
+- O céu, a neblina, a iluminação e as pedras mudam suavemente. A decoração só troca de aparência quando recicla fora do primeiro plano.
+- Nenhuma mudança na colisão, energia, caçador, controles ou tempo do modo 3D.
+- Detalhes, testes e critérios de aceite: [docs/3d-regions.md](docs/3d-regions.md).
+
+Após o deploy: `?test_chase=1&v=0110` com a marca `BUILD 0.11.0-regions-20261102`.
