@@ -16,6 +16,8 @@ export interface RunSnapshot {
   orbs:number;
   forceTutorial:boolean;
   chaseDone:boolean;
+  /** One-shot platform section, after the 3D pursuit. Optional for old saves. */
+  platformDone?:boolean;
 }
 export interface ChaseGate {
   distancePx:number;
