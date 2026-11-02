@@ -62,7 +62,9 @@ export function flightPickupCrossed(pickup:FlightPickup,prevElapsed:number,
   if(pickup.lane!==lane||nextElapsed<prevElapsed)return false;
   const before=flightPickupX(pickup,prevElapsed);
   const after=flightPickupX(pickup,nextElapsed);
-  return before>=BAT_PLAYER_X-15&&after<=BAT_PLAYER_X+15;
+  // The item crosses the player's vertical line once, not on every frame
+  // spent within an overlap band; the scene additionally stores pickup IDs.
+  return before>BAT_PLAYER_X&&after<=BAT_PLAYER_X;
 }
 export function flightEarnedDistance(elapsed:number):number{
   return Math.max(0,Math.min(BAT_FLIGHT_DISTANCE_PX,
