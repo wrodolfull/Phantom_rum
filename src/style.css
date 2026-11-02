@@ -63,3 +63,68 @@ button:focus-visible{outline:3px solid #91e6ff;outline-offset:3px}
   padding:7px;background:rgba(20,14,40,.9);border:1px solid #b87fd7;
   font:700 clamp(9px,1.2vw,13px) monospace;color:#fce2ff;white-space:normal;
   overflow-wrap:anywhere}
+
+
+/* App-wide fullscreen button. It is outside Phaser's canvas, so scene
+   transitions, Three.js canvas changes and pause overlays cannot remove it. */
+#fullscreen-toggle{
+  position:absolute;
+  right:max(5px,env(safe-area-inset-right));
+  bottom:max(16px,env(safe-area-inset-bottom));
+  z-index:85;
+  display:flex;align-items:center;justify-content:center;
+  width:35px;height:32px;
+  padding:0;border:1px solid #c5b9ed;border-radius:6px;
+  background:rgba(35,30,72,.82);color:#f9f7ff;
+  font:700 22px/1 monospace;cursor:pointer;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+#fullscreen-toggle:active{background:#53458b}
+#fullscreen-toggle[aria-pressed="true"]{font-size:17px}
+#fullscreen-toggle:focus-visible{outline:2px solid #8deaff;outline-offset:2px}
+
+/* Fullscreen can have a taller/wider aspect than the 480×270 game.
+   Center a 16:9 stage instead of stretching characters, lane boundaries or
+   touchscreen coordinates. The leftover space becomes subtle letterboxing. */
+#game-shell:fullscreen,
+#game-shell:-webkit-full-screen,
+#game-shell.immersive-fallback{
+  width:100vw;width:100dvw;
+  height:100vh;height:100dvh;
+  min-width:0;max-width:none;max-height:none;
+  aspect-ratio:auto;
+  margin:0;background:#101026;
+  border:0;overflow:hidden;
+}
+#game-shell.immersive-fallback{
+  position:fixed;inset:0;z-index:110;
+}
+#game-shell:fullscreen #game,
+#game-shell:-webkit-full-screen #game,
+#game-shell.immersive-fallback #game{
+  position:absolute;inset:auto;
+  left:50%;top:50%;transform:translate(-50%,-50%);
+  width:min(100dvw,calc(100dvh * 16 / 9));
+  height:min(100dvh,calc(100dvw * 9 / 16));
+}
+/* The Three.js HUD uses the same fitted stage as its canvas, including
+   unusual phone aspect ratios (18:9, 19.5:9 and 20:9). */
+#game-shell:fullscreen #chase-ui,
+#game-shell:-webkit-full-screen #chase-ui,
+#game-shell.immersive-fallback #chase-ui{
+  inset:auto;
+  width:min(100dvw,calc(100dvh * 16 / 9));
+  height:min(100dvh,calc(100dvw * 9 / 16));
+  left:50%;top:50%;transform:translate(-50%,-50%);
+}
+#game-shell:fullscreen #fullscreen-toggle,
+#game-shell:-webkit-full-screen #fullscreen-toggle,
+#game-shell.immersive-fallback #fullscreen-toggle{
+  right:max(8px,env(safe-area-inset-right));
+  bottom:max(8px,env(safe-area-inset-bottom));
+  width:38px;height:35px;
+}
+/* On portrait devices without orientation-lock support, do not show a modal
+   over an already-active fullscreen scene. The fitted stage stays usable. */
+:root.fullscreen-view #orientation-prompt{display:none!important}

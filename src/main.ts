@@ -27,6 +27,7 @@ import {activeAppearance} from "./shop/economy";
 import type {HeroId,AccessoryId} from "./shop/catalog";
 import {GestureInput} from "./input/touchControls";
 import {FrameMonitor} from "./performance/frameMonitor";
+import {initFullscreen} from "./fullscreen";
 
 // The orientation reminder is dismissible without blocking portrait fallback.
 try{
@@ -719,7 +720,7 @@ class GameScene extends Phaser.Scene {
 
 }
 
-new Phaser.Game({
+const game=new Phaser.Game({
   // Phaser's 2D uses Canvas to leave the only WebGL context available for Three.js.
   // Prevents competing WebGL canvases on resource-constrained mobile browsers.
   type:Phaser.CANVAS,width:W,height:H,parent:"game",backgroundColor:"#171733",
@@ -727,3 +728,7 @@ new Phaser.Game({
   scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH},
   scene:[MenuScene,GameScene,ResultsScene,AchievementsScene,ShopScene,ChaseScene,ChaseFallbackScene,PlatformScene,BatFlightScene]
 });
+
+// A single fullscreen controller is independent of scene transitions. Phaser
+// recalculates FIT scaling after changing the host size or device orientation.
+initFullscreen(()=>game.scale.refresh());
