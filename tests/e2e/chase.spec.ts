@@ -12,7 +12,7 @@ test("chase does not return to runner within seconds in Chromium",async({page})=
   page.on("pageerror",e=>errors.push(e.message));
   page.on("console",m=>{if(["error","warning"].includes(m.type()))errors.push(m.text());});
   await page.goto("/?test_chase=1&debug_chase=1");
-  await expect(page.locator("#phantom-build")).toContainText("0.9.2");
+  await expect(page.locator("#phantom-build")).toContainText("0.9.3");
   await pressStart(page);
   await expect.poll(async()=>await page.locator("html").getAttribute("data-phantom-mode"),
     {timeout:15_000}).toMatch(/chase-(three|compat)/);

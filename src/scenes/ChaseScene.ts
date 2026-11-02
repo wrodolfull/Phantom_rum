@@ -9,6 +9,7 @@ import {reportMode,reportChaseError,reportChaseSeconds} from "../game/diagnostic
 import {ChaseClock} from "../game/ChaseClock";
 import {
   CHASE_END_PX,CHASE_WORLD_SPEED,chaseCompleted,mergeRun,asRunStats,chaseCollision,waveAt,
+  advanceChaseHazard,CHASE_DESPAWN_Z,
   type ChaseObject,type ChaseObstacleKind,type RunSnapshot
 } from "../game/modes";
 
@@ -470,13 +471,13 @@ export class ChaseScene extends Phaser.Scene {
         this.spawnClock-=1.55;this.spawnWave();
       }
       for(const hazard of this.hazards){
-        if(hazard.obstacle.passed)continue;
-        hazard.obstacle.z+=24*dt;
+        // All obstacles continue travelling past the player, even after hit
+        // detection. "passed" only gates interaction; it never freezes motion.
+        const step=advanceChaseHazard(hazard.obstacle,dt);
         hazard.model.position.z=hazard.obstacle.z;
         if(hazard.obstacle.kind==="ward"||hazard.obstacle.kind==="essence"||hazard.obstacle.kind==="orb")
           hazard.model.rotation.y+=dt*1.7;
-        if(hazard.obstacle.z>=PLAYER_Z-.75){
-          hazard.obstacle.passed=true;
+        if(step.crossed){
           const laneNear=Math.abs(hazard.model.position.x-this.ghost!.position.x)<1;
           const verdict=laneNear?chaseCollision(hazard.obstacle,this.lane,
             this.jumpHeight,this.intangible):"miss";
@@ -492,8 +493,10 @@ export class ChaseScene extends Phaser.Scene {
         }
       }
       this.hazards=this.hazards.filter(h=>{
-        if(h.obstacle.z<=11)return true;
-        this.world!.remove(h.model);this.disposeObject(h.model);return false;
+        if(h.obstacle.z<=CHASE_DESPAWN_Z)return true;
+        this.world!.remove(h.model);
+        this.disposeObject(h.model);
+        return false;
       });
       if(this.hunterPressure>=1){this.captured();return;}
       if(chaseCompleted(this.run.distancePx,this.activeSeconds))this.beginReturn();

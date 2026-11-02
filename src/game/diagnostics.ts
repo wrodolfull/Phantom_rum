@@ -2,7 +2,7 @@
  * Minimal on-device diagnostics for an intermittent scene transition bug.
  * Nothing is sent to a server. Use ?debug_chase=1 to show detailed states.
  */
-export const PHANTOM_BUILD="0.9.2-debug-20261101";
+export const PHANTOM_BUILD="0.9.3-hazards-20261101";
 export type Mode="menu"|"runner"|"chase-loading"|"chase-three"|"chase-compat"|"results";
 const logs:string[]=[];
 const enabled=new URLSearchParams(location.search).has("debug_chase");

@@ -8,6 +8,7 @@ import {setupVisuals,ensureAppearanceVisuals,appearanceTexture} from "../art/pix
 import {activeAppearance} from "../shop/economy";
 import {
   CHASE_END_PX,CHASE_WORLD_SPEED,chaseCompleted,
+  advanceChaseHazard,CHASE_DESPAWN_Z,
   mergeRun,asRunStats,chaseCollision,waveAt,
   type ChaseObject,type RunSnapshot
 } from "../game/modes";
@@ -200,10 +201,10 @@ export class ChaseFallbackScene extends Phaser.Scene {
       }
       for(const wave of this.waves){
         const object=wave.object;
-        if(object.passed)continue;
-        object.z+=24*delta;
-        if(object.z>=1.5){
-          object.passed=true;
+        // Keep progressing after interaction; otherwise objects stick to
+        // Phantom's position and never leave the camera.
+        const step=advanceChaseHazard(object,delta);
+        if(step.crossed){
           const effect=chaseCollision(object,this.lane,this.jumping,this.intangible);
           if(effect==="hit"){
             this.pressure=Math.min(1,this.pressure+.36);retroAudio.play("hit");
@@ -216,7 +217,7 @@ export class ChaseFallbackScene extends Phaser.Scene {
           }
         }
       }
-      this.waves=this.waves.filter(w=>w.object.z<8);
+      this.waves=this.waves.filter(w=>w.object.z<=CHASE_DESPAWN_Z);
       if(this.pressure>=1){this.capture();return;}
       if(chaseCompleted(this.run.distancePx,this.activeSeconds)){
         this.finished=true;this.gesture.clear();this.hint.setText("PORTAL — VOLTANDO AO 2D");
