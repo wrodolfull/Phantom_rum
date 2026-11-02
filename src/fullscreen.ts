@@ -47,6 +47,7 @@ export function initFullscreen(onLayoutChanged:()=>void):()=>void{
     if(disposed)return;
     const mode=fullscreenMode(host,doc);
     document.documentElement.dataset.phantomFullscreen=mode;
+    document.documentElement.classList.toggle("fullscreen-view",mode!=="off");
     const label=fullscreenControlLabel(mode);
     button.setAttribute("aria-label",label);
     button.setAttribute("title",label+" (F)");
