@@ -182,3 +182,13 @@ Depois de concluir a mansão, aos ~1700m, surge um morcego luminoso especial com
 - Manual em [docs/bat-possession-flight.md](docs/bat-possession-flight.md).
 
 Versão de verificação: `BUILD 0.14.0-batflight-20261102`.
+
+## Modo tela cheia (PR #18)
+- O botão **⛶** no canto inferior direito entra em tela cheia em qualquer modo: menu, corrida 2D, perseguição Three.js/2.5D, Mansão das Almas e voo do morcego.
+- No PC, a tecla **F** alterna entre tela cheia e janela. Para sair, também é possível usar **Esc** quando o navegador estiver em tela cheia nativa.
+- Em Android Chrome, o sistema usa a **Fullscreen API** para ocultar barras do navegador e tenta bloquear a orientação na horizontal. O bloqueio pode ser recusado pelas preferências do dispositivo.
+- Em navegadores que não suportam fullscreen em elementos HTML (algumas versões de Safari/iOS), utiliza uma **visualização alternativa que preenche o espaço disponível da página**, sem prometer ocultar os controles do sistema.
+- Ao sair do modo cheio, o jogo continua na cena atual sem reiniciar a partida.
+- Para manter a geometria do jogo e do 3D fiel, o palco é centralizado em **16:9**, com barras laterais discretas quando o display tem proporção diferente. O HUD do Three.js acompanha o mesmo palco.
+- Botão tem acessibilidade por leitor de tela (aria-label, aria-pressed); não depende do Phaser e funciona também durante as transições.
+- Versão de teste: `BUILD 0.15.0-fullscreen-20261102`. Após merge/deploy, confira `?v=0150`.
