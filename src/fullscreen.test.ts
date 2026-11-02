@@ -9,7 +9,7 @@ describe("Phantom fullscreen state",()=>{
     expect(fullscreenControlLabel("off")).toBe("Entrar em tela cheia");
   });
   it("recognizes the native Fullscreen API for the game shell",()=>{
-    const doc={fullscreenElement:host} as Document;
+    const doc={fullscreenElement:host} as unknown as Document;
     expect(fullscreenMode(host,doc)).toBe("native");
     expect(fullscreenControlLabel("native")).toBe("Sair da tela cheia");
   });
