@@ -157,6 +157,9 @@ class GameScene extends Phaser.Scene {
   private hunterNotice!:Phaser.GameObjects.Text;
   private hunterNoticeTime=0;
   private waveGraphics!:Phaser.GameObjects.Graphics;
+  private hunterGlow!:Phaser.GameObjects.Graphics;
+  private enemyHints!:Phaser.GameObjects.Graphics;
+  private hintLabels:Phaser.GameObjects.Text[]=[];
   private capturing=false;
   private pauseButton!: Phaser.GameObjects.Text;
   private musicButton!: Phaser.GameObjects.Text;
@@ -274,8 +277,10 @@ class GameScene extends Phaser.Scene {
     this.speedLines=this.add.graphics().setDepth(1);
     this.phantom=this.add.image(PLAYER_X,this.y+16,
       appearanceTexture(this.heroId,this.accessoryId,false,0)).setDepth(6);
+    this.hunterGlow=this.add.graphics().setDepth(4);
     this.hunterSprite=this.add.image(hunterScreenX(this.hunterState.danger),
-      GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setDepth(5);
+      GROUND,PURSUER_TEXTURES[0]).setOrigin(.5,1).setScale(1.48).setDepth(5);
+    this.enemyHints=this.add.graphics().setDepth(7);
     this.soulFollowers=Array.from({length:MAX_SOUL_COMPANIONS},()=>
       this.add.image(-20,GROUND-12,SOUL_FOLLOWER_TEXTURE)
         .setScale(.64).setDepth(5).setVisible(false));
@@ -293,10 +298,11 @@ class GameScene extends Phaser.Scene {
       .lineStyle(1, 0x6b63a5).strokeRoundedRect(5, 4, 320, 40, 5);
     this.hud=this.add.text(10,8,"",{fontFamily:"monospace",fontSize:"12px",color:"#ffffff",stroke:"#20183c",strokeThickness:3}).setDepth(20);
     this.energyBar=this.add.graphics().setDepth(20);
-    this.add.graphics().setDepth(18).fillStyle(0x201939,.9)
-      .fillRoundedRect(5,46,182,30,4);
-    this.hunterHud=this.add.text(10,48,"",{
-      fontFamily:"monospace",fontSize:"9px",color:"#fff0ee",
+    this.add.graphics().setDepth(18).fillStyle(0x201939,.95)
+      .fillRoundedRect(4,46,214,39,5)
+      .lineStyle(1,0xff9995,.8).strokeRoundedRect(4,46,214,39,5);
+    this.hunterHud=this.add.text(10,49,"",{
+      fontFamily:"monospace",fontSize:"12px",color:"#fff0ee",
       stroke:"#1d142b",strokeThickness:2
     }).setDepth(21);
     this.hunterBar=this.add.graphics().setDepth(21);
@@ -304,12 +310,17 @@ class GameScene extends Phaser.Scene {
       fontFamily:"monospace",fontSize:"10px",color:"#f9efff",
       backgroundColor:"#4e375e",padding:{x:6,y:4},align:"center"
     }).setOrigin(.5,0).setDepth(26).setVisible(false);
-    this.waveButton=this.add.text(424,206,"ONDA [Q]",{
-      fontFamily:"monospace",fontSize:"9px",color:"#e5ffff",
-      backgroundColor:"#33506d",padding:{x:5,y:5}
+    this.waveButton=this.add.text(413,194,"✦ ONDA 0/3",{
+      fontFamily:"monospace",fontSize:"12px",color:"#edfeff",
+      backgroundColor:"#304b6b",padding:{x:10,y:10}
     }).setOrigin(.5).setDepth(27).setInteractive({useHandCursor:true});
-    this.waveButton.on("pointerdown",()=>this.triggerSpectralWave());
-    this.waveButton.setVisible(false);
+    this.waveButton.setStroke("#172437",3);
+    this.waveButton.on("pointerdown",()=>{
+      this.triggerSpectralWave();
+      if(!canActivateSpectralWave(this.hunterState))
+        this.showHunterNotice("RESGATE 3 ALMAS PARA LIBERAR A ONDA",1.3);
+    });
+    this.waveButton.setVisible(true);
     this.tierLabel=this.add.text(W-8,48,"", {fontFamily:"monospace",fontSize:"9px",color:"#dbd2ff",stroke:"#1d1a43",strokeThickness:2}).setOrigin(1,0).setDepth(20);
     this.tutorialBanner=this.add.text(W/2,109,"",{fontFamily:"monospace",fontSize:"9px",color:"#fcf8ff",backgroundColor:"#45406f",padding:{x:9,y:6},align:"center"}).setOrigin(.5,0).setDepth(23).setVisible(this.tutorialEnabled);
     this.updateTutorial(PLAYER_X);
@@ -679,10 +690,19 @@ class GameScene extends Phaser.Scene {
     }
   }
   private drawHunterAndSouls():void{
+    const hunterX=hunterScreenX(this.hunterState.danger);
     this.hunterSprite.setTexture(PURSUER_TEXTURES[Math.floor(this.elapsed*7)%2])
-      .setPosition(hunterScreenX(this.hunterState.danger),
-        GROUND+Math.sin(this.elapsed*12)*1.4)
+      .setPosition(hunterX,GROUND+Math.sin(this.elapsed*12)*1.4)
       .setTint(this.hunterState.danger>=80?0xff9eaf:0xffffff);
+    this.hunterGlow.clear()
+      .fillStyle(this.hunterState.danger>=75?0xff647e:0xffd48b,
+        .12+.09*Math.sin(this.elapsed*9))
+      .fillCircle(hunterX+22,GROUND-35,26)
+      .lineStyle(2,this.hunterState.danger>=75?0xff7887:0xf7ddab,.53)
+      .strokeCircle(hunterX+21,GROUND-30,14);
+    this.hunterGlow.lineStyle(1,0xffc488,.44)
+      .lineBetween(hunterX+23,GROUND-31,
+        Math.min(PLAYER_X-10,hunterX+38),GROUND-34);
     for(let i=0;i<this.soulFollowers.length;i++){
       const sprite=this.soulFollowers[i];
       const visible=i<this.hunterState.companions;
@@ -711,13 +731,19 @@ class GameScene extends Phaser.Scene {
         .strokeCircle(PLAYER_X,this.y+16,radius+10);
     }
     this.hunterHud.setText("CAÇADOR "+Math.ceil(this.hunterState.danger)+
-      "/100   ALMAS "+this.hunterState.companions);
+      "/100  ALMAS "+this.hunterState.companions+"/5");
     this.hunterBar.clear()
-      .fillStyle(0x26213f).fillRect(10,64,170,7)
-      .fillStyle(this.hunterState.danger>=75?0xff7d8d:
+      .fillStyle(0x26213f).fillRect(10,69,199,10)
+      .fillStyle(this.hunterState.danger>=75?0xff6379:
         this.hunterState.danger>=45?0xffc277:0x8bd8f3)
-      .fillRect(12,66,Math.round(166*this.hunterState.danger/100),3);
-    this.waveButton.setVisible(canActivateSpectralWave(this.hunterState));
+      .fillRect(12,71,Math.round(195*this.hunterState.danger/100),6);
+    const ready=canActivateSpectralWave(this.hunterState);
+    this.waveButton.setVisible(true)
+      .setText(this.hunterState.waveSeconds>0?"✦ ONDA ATIVA":
+        ready?"✦ ONDA PRONTA!":"✦ ONDA "+this.hunterState.companions+"/3")
+      .setBackgroundColor(ready?"#277d91":"#304b6b")
+      .setAlpha(ready?1:.82)
+      .setScale(ready?1+.045*Math.sin(this.elapsed*8):1);
     if(this.hunterNoticeTime<=0)this.hunterNotice.setVisible(false);
     document.documentElement.dataset.phantomHunterDanger=
       String(Math.ceil(this.hunterState.danger));
